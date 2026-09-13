@@ -11,6 +11,12 @@ function toolRes(name: string, input: unknown, prose = ""): LlmResponse {
   content.push({ type: "tool_use", id: `tu_${name}`, name, input });
   return { content, stopReason: "tool_use" };
 }
+function multiToolRes(tools: { name: string; input: unknown }[], prose = ""): LlmResponse {
+  const content: LlmResponse["content"] = [];
+  if (prose) content.push({ type: "text", text: prose });
+  for (const t of tools) content.push({ type: "tool_use", id: `tu_${t.name}`, name: t.name, input: t.input });
+  return { content, stopReason: "tool_use" };
+}
 function scriptedCall(responses: LlmResponse[]) {
   let i = 0;
   return vi.fn(async () => responses[i++] ?? textRes("klaar"));
@@ -115,6 +121,54 @@ describe("runToolLoop", () => {
     const result = await runToolLoop([{ role: "user", content: "open de lab" }], deps);
     expect(result.navigateTo).toBe("/lab");
     expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("koppelt elk tool_use-block aan een tool_result bij meerdere tools in één beurt", async () => {
+    const execute = vi.fn(async (name: string) => ({ text: `${name} klaar` }));
+    const deps = baseDeps({
+      call: scriptedCall([
+        multiToolRes(
+          [
+            { name: "search_ingredients", input: { query: "biet" } },
+            { name: "search_ingredients", input: { query: "geit" } },
+          ],
+          "Ik zoek twee artikelen.",
+        ),
+        textRes("Beide gevonden."),
+      ]),
+      execute,
+    });
+    const result = await runToolLoop([{ role: "user", content: "zoek biet en geit" }], deps);
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    // Elk tool_use-id moet exact één tool_result terugkrijgen.
+    const toolUseIds = (result.messages as { role: string; content: unknown }[])
+      .filter((m) => m.role === "assistant" && Array.isArray(m.content))
+      .flatMap((m) => m.content as { type: string; id?: string }[])
+      .filter((b) => b.type === "tool_use")
+      .map((b) => b.id);
+    const resultIds = toolResults(result.messages).map((r) => r.tool_use_id);
+    expect(toolUseIds).toHaveLength(2);
+    expect(resultIds.sort()).toEqual(toolUseIds.sort());
+    expect(result.text).toBe("Beide gevonden.");
+  });
+
+  it("voert niets uit als één van meerdere tools bevestiging vereist", async () => {
+    const execute = vi.fn(async () => ({ text: "gedaan" }));
+    const deps = baseDeps({
+      call: scriptedCall([
+        multiToolRes([
+          { name: "search_ingredients", input: { query: "boter" } },
+          { name: "switch_supplier", input: { ingredient: "boter" } },
+        ]),
+      ]),
+      requiresConfirm: (name) => name === "switch_supplier",
+      execute,
+    });
+    const result = await runToolLoop([{ role: "user", content: "wissel boter" }], deps);
+
+    expect(result.pendingConfirmation?.tool).toBe("switch_supplier");
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it("respecteert maxRounds en blijft niet oneindig draaien", async () => {
