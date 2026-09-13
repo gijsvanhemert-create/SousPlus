@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildMenuContext, type CtxRecipe } from "./chef";
+import { buildMenuContext, buildFlavorContext, type CtxRecipe } from "./chef";
 
 // Regressie: eerder bevatte de APP-CONTEXT geen enkel id, waardoor Chef Auguste
 // update_recipe_version/save_recipe_version niet gericht kon aanroepen en een id
@@ -47,5 +47,25 @@ describe("buildMenuContext", () => {
     expect(item.activeVersion).toBeNull();
     expect(item.marginPct).toBeNull();
     expect(item.versions).toEqual([]);
+  });
+});
+
+describe("buildFlavorContext", () => {
+  it("legt de gecureerde affinity-set met scores bloot als bron van waarheid", () => {
+    const flavor = buildFlavorContext();
+    // Gecureerde ingrediënten hebben een echte score → mag als data gepresenteerd.
+    expect(flavor.curatedIngredients).toEqual(expect.arrayContaining(["salmon", "tomato", "beef"]));
+    const misoMatch = flavor.pairings.salmon.find((p) => p.name === "Witte Miso");
+    expect(misoMatch?.score).toBe(96);
+  });
+
+  it("bevat NIET-gecureerde ingrediënten niet, zodat het model zijn eigen kennis moet inzetten", () => {
+    const flavor = buildFlavorContext();
+    // Eendenlever staat niet in de set; miso is alleen een pairing (geen basis-key).
+    expect(flavor.curatedIngredients).not.toContain("eendenlever");
+    expect(flavor.curatedIngredients).not.toContain("foie gras");
+    expect(flavor.curatedIngredients).not.toContain("miso");
+    // Voor deze ingrediënten bestaat er dus geen affinity-score in de data.
+    expect(flavor.pairings["eendenlever"]).toBeUndefined();
   });
 });

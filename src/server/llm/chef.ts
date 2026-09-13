@@ -1,6 +1,7 @@
 import { prisma } from "@/server/db";
 import { recipeCost } from "@/lib/cost";
 import type { CostMode } from "@/lib/cost";
+import { FLAVOR_DB } from "@/lib/flavor-data";
 import { getRouter } from "./router";
 import { llmConfig } from "./config";
 import { TOOL_SCHEMAS, TOOL_BY_NAME, type ChefAction, type ToolContext } from "./tools";
@@ -85,6 +86,22 @@ async function buildContext(locationId: string) {
     catalogSize: catalogCount,
     haccp: checkpoints,
     menu: buildMenuContext(recipes),
+    flavor: buildFlavorContext(),
+  };
+}
+
+// De GECUREERDE affinity-set (bron van waarheid voor exacte scores). Bewust
+// beperkt: alleen deze basisingrediënten hebben een affinity-score uit onze data.
+// Voor al het andere leunt Chef Auguste op zijn eigen culinaire kennis (expliciet
+// als inzicht, niet als score). De bredere Foodpairing®-koppeling volgt in fase 2;
+// dit verandert alleen wat Auguste in het gesprek mag zeggen, niet de Flavor
+// Matcher-module zelf.
+export function buildFlavorContext() {
+  return {
+    note:
+      "Gecureerde affinity-set (beperkt). Alleen curatedIngredients hebben een geverifieerde affinity-score uit onze data; voor al het overige gebruik je je eigen culinaire kennis als inzicht, nooit als exacte score.",
+    curatedIngredients: Object.keys(FLAVOR_DB),
+    pairings: FLAVOR_DB,
   };
 }
 
@@ -98,6 +115,7 @@ function buildSystem(context: unknown): string {
     "Wanneer een vraag of opdracht over concrete ingrediënten, prijzen of een nieuwe receptuur gaat, gebruik je EERST search_ingredients om echte artikelen en prijzen uit de Hanos/Sligro-catalogus op te halen, en pas daarna reken of stel je voor — verzin geen prijzen. Sla een recept dat je voorstelt ook echt op met save_recipe_version, met de gevonden prijzen als p (prijs per kg/L) en de hoeveelheid als g (gram per couvert). " +
     "Elk gerecht in de APP-CONTEXT heeft een recipeId, een activeVersion met een id, en een lijst versions met per versie een id + label. Gebruik ALTIJD deze echte id's uit de context — verzin of gok NOOIT een id. Voor update_recipe_version geef je id = het versie-id mee (meestal activeVersion.id, of het bijpassende id uit versions). Voor een nieuwe versie van een BESTAAND recept geef je recipeId mee aan save_recipe_version. " +
     "Als een tool een fout teruggeeft, presenteer je het resultaat NOOIT alsof het gelukt is: meld eerlijk en beknopt dat het niet lukte. Cijfers als marge en foodcost baseer je uitsluitend op de APP-CONTEXT (huidige staat); een uitkomst ná een wijziging die niet is opgeslagen noem je expliciet 'verwacht/na aanpassing', nooit als vaststaand feit. " +
+    "Bij vragen over smaakcombinaties/pairings: de APP-CONTEXT bevat onder 'flavor' een GECUREERDE affinity-set (flavor.curatedIngredients + flavor.pairings), nu beperkt tot enkele basisingrediënten. Zit het gevraagde ingrediënt in die set, dan mag je een concrete match presenteren als 'affinity-score X uit onze data'. Zit het ingrediënt of de combinatie er NIET in (bv. eendenlever, miso als basis, en de meeste andere), zeg dan NOOIT dat je het niet weet en verzin NOOIT een exacte score: gebruik je eigen brede culinaire kennis als AI om onderbouwd te adviseren — welke smaken, texturen en bereidingen samengaan en waarom — en frame dat expliciet als culinair inzicht ('op basis van culinaire ervaring'), niet als een geverifieerd datapunt. Maak het onderscheid tussen beide bronnen in je antwoord altijd duidelijk. De gecureerde set is een tussenstap; de bredere Foodpairing®-koppeling volgt in fase 2. " +
     "APP-CONTEXT (JSON):\n" +
     JSON.stringify(context)
   );
