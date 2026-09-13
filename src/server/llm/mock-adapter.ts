@@ -63,6 +63,32 @@ function lastToolResultJson(messages: LlmMessage[]): unknown {
   return null;
 }
 
+// Leest de APP-CONTEXT-JSON terug uit de system-prompt, zodat de mock met de
+// ECHTE recipe-/versie-id's kan werken (net als het echte model zou doen).
+type CtxMenuItem = { recipeId: string; dish: string; activeVersion: { id: string } | null };
+function appContextMenu(system: string): CtxMenuItem[] {
+  const marker = "APP-CONTEXT (JSON):\n";
+  const idx = system.indexOf(marker);
+  if (idx === -1) return [];
+  try {
+    const ctx = JSON.parse(system.slice(idx + marker.length)) as { menu?: CtxMenuItem[] };
+    return ctx.menu ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function findRecipeInQuery(menu: CtxMenuItem[], q: string): CtxMenuItem | null {
+  const hits = menu.filter((m) => q.includes(m.dish.toLowerCase()));
+  hits.sort((a, b) => b.dish.length - a.dish.length); // langste (meest specifieke) match wint
+  return hits[0] ?? null;
+}
+
+function parseTargetPrice(q: string): number | null {
+  const m = q.match(/(?:naar|op|€|=)\s*€?\s*(\d+(?:[.,]\d{1,2})?)/) ?? q.match(/(\d+(?:[.,]\d{1,2})?)/);
+  return m ? Number(m[1].replace(",", ".")) : null;
+}
+
 function text(t: string): LlmResponse {
   return { content: [{ type: "text", text: t }], stopReason: "end_turn" };
 }
@@ -127,6 +153,25 @@ export class MockAdapter implements LlmAdapter {
                 ? "supplier"
                 : "library";
       return toolCall("navigate_app", { tab }, "Ik open het voor je, chef.");
+    }
+
+    // Bestaande receptversie aanpassen (bv. menuprijs) — gebruikt de echte
+    // versie-id uit de APP-CONTEXT, zodat update_recipe_version daadwerkelijk het
+    // juiste recept raakt in plaats van een gegokt id.
+    if (/(menuprijs|verhoog|verlaag|zet de prijs|prijs.*(aan|naar|op))/.test(q) && !/leverancier/.test(q)) {
+      if (rounds === 0) {
+        const target = findRecipeInQuery(appContextMenu(req.system), q);
+        const price = parseTargetPrice(q);
+        if (target?.activeVersion?.id && price) {
+          return toolCall(
+            "update_recipe_version",
+            { id: target.activeVersion.id, menuPrice: price },
+            `Ik pas de menuprijs van ${target.dish} aan naar €${price.toFixed(2)}.`,
+          );
+        }
+        return text("Welk gerecht en welke nieuwe prijs, chef? Dan pas ik de versie meteen aan.");
+      }
+      return text("De nieuwe menuprijs staat vast; de marge is direct herberekend.");
     }
 
     if (/biet|voorstel|nieuw|gerecht|recept|stel.*voor/.test(q)) {
