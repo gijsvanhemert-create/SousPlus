@@ -1,0 +1,418 @@
+id;naam;categorie;leverancier;eenheid;prijs_eur
+zalmfilet-vers-noorwegen-0;Zalmfilet vers (Noorwegen);Vis & Zeevruchten;Beide;kg;28,50
+zalmzijde-gerookt-1;Zalmzijde gerookt;Vis & Zeevruchten;Hanos;kg;34,00
+kabeljauwfilet-msc-2;Kabeljauwfilet MSC;Vis & Zeevruchten;Beide;kg;24,90
+schol-filet-3;Schol filet;Vis & Zeevruchten;Beide;kg;19,50
+tongfilet-4;Tongfilet;Vis & Zeevruchten;Sligro;kg;42,00
+tarbot-heel-5;Tarbot heel;Vis & Zeevruchten;Sligro;kg;32,00
+zeebaars-wild-6;Zeebaars (wild);Vis & Zeevruchten;Hanos;kg;29,00
+doradefilet-7;Doradefilet;Vis & Zeevruchten;Hanos;kg;21,50
+tonijn-loin-sashimi-8;Tonijn loin (sashimi);Vis & Zeevruchten;Beide;kg;38,50
+roodbaarsfilet-9;Roodbaarsfilet;Vis & Zeevruchten;Beide;kg;18,90
+heilbot-10;Heilbot;Vis & Zeevruchten;Beide;kg;31,00
+gamba-s-16-20-ontdooid-11;Gamba's 16/20 ontdooid;Vis & Zeevruchten;Hanos;kg;22,00
+garnalen-hollandse-gepeld-12;Garnalen Hollandse gepeld;Vis & Zeevruchten;Sligro;kg;36,00
+coquilles-sint-jakobsschelpen-13;Coquilles / Sint-jakobsschelpen;Vis & Zeevruchten;Beide;kg;44,00
+mosselen-jumbo-14;Mosselen jumbo;Vis & Zeevruchten;Sligro;bak;9,80
+oesters-creuses-doos-50-15;Oesters Creuses (doos 50);Vis & Zeevruchten;Sligro;doos;48,00
+inktvisringen-16;Inktvisringen;Vis & Zeevruchten;Beide;kg;14,50
+octopus-tentakel-17;Octopus tentakel;Vis & Zeevruchten;Hanos;kg;26,00
+krab-kluifjes-18;Krab kluifjes;Vis & Zeevruchten;Sligro;kg;19,00
+forel-gerookt-filet-19;Forel gerookt filet;Vis & Zeevruchten;Beide;kg;23,00
+haring-maatjes-20;Haring maatjes;Vis & Zeevruchten;Sligro;kg;12,50
+paling-gerookt-21;Paling gerookt;Vis & Zeevruchten;Beide;kg;39,00
+surimi-sticks-22;Surimi sticks;Vis & Zeevruchten;Beide;kg;8,90
+vislever-lotte-23;Vislever (lotte);Vis & Zeevruchten;Hanos;kg;16,00
+garnalenkroketten-40-st-24;Garnalenkroketten (40 st);Vis & Zeevruchten;Sligro;doos;28,00
+runderhaas-tenderloin-25;Runderhaas (tenderloin);Vlees;Hanos;kg;39,50
+entrecote-iers-26;Entrecote Iers;Vlees;Sligro;kg;27,00
+ribeye-27;Ribeye;Vlees;Hanos;kg;26,50
+bavette-28;Bavette;Vlees;Beide;kg;19,50
+picanha-29;Picanha;Vlees;Hanos;kg;21,00
+runderriblappen-30;Runderriblappen;Vlees;Hanos;kg;12,50
+sucadelappen-31;Sucadelappen;Vlees;Sligro;kg;13,50
+ossenstaart-32;Ossenstaart;Vlees;Sligro;kg;9,80
+runderbouillonbotten-33;Runderbouillonbotten;Vlees;Beide;kg;3,20
+kalfsschnitzel-34;Kalfsschnitzel;Vlees;Hanos;kg;28,00
+kalfszwezerik-35;Kalfszwezerik;Vlees;Hanos;kg;34,00
+kalfsfond-basis-36;Kalfsfond basis;Vlees;Hanos;kg;8,50
+varkenshaas-37;Varkenshaas;Vlees;Hanos;kg;12,90
+procureur-coppa-38;Procureur / coppa;Vlees;Sligro;kg;9,50
+buikspek-39;Buikspek;Vlees;Beide;kg;8,90
+speklap-40;Speklap;Vlees;Beide;kg;6,50
+iberico-secreto-41;Iberico secreto;Vlees;Beide;kg;18,50
+lamsrack-frenched-42;Lamsrack Frenched;Vlees;Beide;kg;29,00
+lamsbout-zonder-been-43;Lamsbout zonder been;Vlees;Hanos;kg;22,00
+lamsschouder-44;Lamsschouder;Vlees;Beide;kg;15,50
+hertenbiefstuk-45;Hertenbiefstuk;Vlees;Beide;kg;31,00
+wild-zwijn-ragout-46;Wild zwijn ragout;Vlees;Hanos;kg;17,00
+gehakt-half-om-half-47;Gehakt half-om-half;Vlees;Hanos;kg;7,90
+rundergehakt-mager-48;Rundergehakt mager;Vlees;Hanos;kg;9,20
+merg-pijpjes-49;Merg pijpjes;Vlees;Sligro;kg;4,50
+kippenfilet-nl-50;Kippenfilet (NL);Gevogelte;Hanos;kg;8,90
+kippendijfilet-51;Kippendijfilet;Gevogelte;Beide;kg;7,50
+kippenpoten-52;Kippenpoten;Gevogelte;Hanos;kg;4,20
+hele-kip-1-4kg-53;Hele kip 1.4kg;Gevogelte;Sligro;stuk;6,80
+kippenvleugels-54;Kippenvleugels;Gevogelte;Beide;kg;4,90
+kippenkarkas-fond-55;Kippenkarkas (fond);Gevogelte;Beide;kg;2,10
+maiskip-supreme-56;Maïskip supreme;Gevogelte;Beide;kg;14,50
+eendenborst-57;Eendenborst;Gevogelte;Beide;kg;19,00
+eendenbout-confit-58;Eendenbout confit;Gevogelte;Hanos;kg;12,50
+kalkoenfilet-59;Kalkoenfilet;Gevogelte;Beide;kg;11,00
+parelhoen-supreme-60;Parelhoen supreme;Gevogelte;Beide;kg;16,50
+kwartel-4-st-61;Kwartel (4 st);Gevogelte;Hanos;doos;13,00
+ganzenlever-foie-gras-62;Ganzenlever / foie gras;Gevogelte;Sligro;kg;78,00
+kippenlevertjes-63;Kippenlevertjes;Gevogelte;Hanos;kg;5,50
+prosciutto-di-parma-18mnd-64;Prosciutto di Parma 18mnd;Charcuterie & Vleeswaren;Beide;kg;32,00
+serrano-ham-65;Serrano ham;Charcuterie & Vleeswaren;Sligro;kg;24,00
+coppa-di-parma-66;Coppa di Parma;Charcuterie & Vleeswaren;Beide;kg;36,00
+chorizo-picante-67;Chorizo picante;Charcuterie & Vleeswaren;Sligro;kg;14,50
+salami-milano-68;Salami Milano;Charcuterie & Vleeswaren;Hanos;kg;16,00
+pancetta-69;Pancetta;Charcuterie & Vleeswaren;Beide;kg;18,00
+ontbijtspek-plakken-70;Ontbijtspek plakken;Charcuterie & Vleeswaren;Beide;kg;9,50
+gerookte-eendenfilet-71;Gerookte eendenfilet;Charcuterie & Vleeswaren;Sligro;kg;28,00
+rilettes-van-eend-72;Rilettes van eend;Charcuterie & Vleeswaren;Beide;kg;19,00
+pate-en-croute-73;Paté en croûte;Charcuterie & Vleeswaren;Hanos;kg;17,50
+bresaola-74;Bresaola;Charcuterie & Vleeswaren;Sligro;kg;39,00
+mortadella-met-pistache-75;Mortadella met pistache;Charcuterie & Vleeswaren;Beide;kg;13,00
+tomaten-trostomaat-76;Tomaten trostomaat;Groente (vers);Sligro;kg;3,20
+cherrytomaten-77;Cherrytomaten;Groente (vers);Hanos;bak;2,40
+roma-tomaten-78;Roma tomaten;Groente (vers);Hanos;kg;2,90
+komkommer-79;Komkommer;Groente (vers);Sligro;stuk;0,85
+paprika-mix-rood-geel-groen-80;Paprika mix (rood/geel/groen);Groente (vers);Sligro;kg;3,50
+courgette-81;Courgette;Groente (vers);Hanos;kg;2,10
+aubergine-82;Aubergine;Groente (vers);Sligro;kg;2,80
+ui-geel-83;Ui geel;Groente (vers);Hanos;kg;0,95
+rode-ui-84;Rode ui;Groente (vers);Sligro;kg;1,40
+sjalot-85;Sjalot;Groente (vers);Sligro;kg;3,20
+knoflook-bollen-86;Knoflook bollen;Groente (vers);Beide;kg;6,50
+prei-87;Prei;Groente (vers);Sligro;kg;1,90
+lente-ui-bos-88;Lente-ui (bos);Groente (vers);Hanos;bos;0,95
+wortel-89;Wortel;Groente (vers);Beide;kg;1,10
+bospeen-90;Bospeen;Groente (vers);Sligro;bos;1,60
+knolselderij-91;Knolselderij;Groente (vers);Sligro;stuk;1,80
+bleekselderij-92;Bleekselderij;Groente (vers);Hanos;kg;2,40
+venkel-93;Venkel;Groente (vers);Hanos;kg;3,10
+broccoli-94;Broccoli;Groente (vers);Hanos;kg;2,60
+bloemkool-95;Bloemkool;Groente (vers);Beide;stuk;1,90
+spruitjes-96;Spruitjes;Groente (vers);Hanos;kg;2,80
+sperziebonen-haricots-verts-97;Sperziebonen (haricots verts);Groente (vers);Hanos;kg;4,20
+doperwten-vers-98;Doperwten vers;Groente (vers);Sligro;kg;5,50
+spinazie-blad-99;Spinazie blad;Groente (vers);Sligro;kg;4,80
+rucola-100;Rucola;Groente (vers);Sligro;bak;3,10
+little-gem-sla-101;Little gem sla;Groente (vers);Sligro;stuk;0,90
+veldsla-102;Veldsla;Groente (vers);Sligro;bak;4,50
+witlof-103;Witlof;Groente (vers);Sligro;kg;2,30
+rode-biet-104;Rode biet;Groente (vers);Beide;kg;1,70
+pompoen-105;Pompoen;Groente (vers);Sligro;kg;1,50
+champignons-wit-106;Champignons wit;Groente (vers);Sligro;kg;4,10
+kastanjechampignons-107;Kastanjechampignons;Groente (vers);Hanos;kg;4,80
+oesterzwam-108;Oesterzwam;Groente (vers);Sligro;kg;9,50
+shiitake-109;Shiitake;Groente (vers);Hanos;kg;12,00
+cantharel-seizoen-110;Cantharel (seizoen);Groente (vers);Hanos;kg;28,00
+eekhoorntjesbrood-cep-111;Eekhoorntjesbrood (cep);Groente (vers);Beide;kg;34,00
+asperges-wit-aa-112;Asperges wit AA;Groente (vers);Sligro;kg;9,80
+asperges-groen-113;Asperges groen;Groente (vers);Sligro;kg;7,50
+avocado-hass-114;Avocado Hass;Groente (vers);Hanos;stuk;0,95
+gember-vers-115;Gember vers;Groente (vers);Hanos;kg;6,50
+citroengras-stengels-116;Citroengras (stengels);Groente (vers);Hanos;kg;14,00
+pak-choi-117;Pak choi;Groente (vers);Beide;kg;3,40
+mais-kolf-118;Mais kolf;Groente (vers);Sligro;stuk;1,10
+pastinaak-119;Pastinaak;Groente (vers);Beide;kg;2,20
+knolraap-120;Knolraap;Groente (vers);Beide;kg;1,60
+citroen-121;Citroen;Fruit (vers);Beide;kg;2,40
+limoen-122;Limoen;Fruit (vers);Beide;kg;4,20
+sinaasappel-pers-123;Sinaasappel pers;Fruit (vers);Sligro;kg;1,60
+granny-smith-appel-124;Granny Smith appel;Fruit (vers);Sligro;kg;1,90
+peer-conference-125;Peer Conference;Fruit (vers);Beide;kg;2,10
+banaan-126;Banaan;Fruit (vers);Hanos;kg;1,40
+aardbeien-127;Aardbeien;Fruit (vers);Sligro;bak;2,80
+frambozen-128;Frambozen;Fruit (vers);Beide;bak;3,50
+bramen-129;Bramen;Fruit (vers);Hanos;bak;3,60
+blauwe-bessen-130;Blauwe bessen;Fruit (vers);Beide;bak;3,20
+mango-131;Mango;Fruit (vers);Sligro;stuk;1,60
+ananas-132;Ananas;Fruit (vers);Hanos;stuk;2,20
+passievrucht-133;Passievrucht;Fruit (vers);Sligro;kg;9,50
+vijgen-vers-134;Vijgen vers;Fruit (vers);Sligro;kg;8,00
+druiven-pitloos-135;Druiven pitloos;Fruit (vers);Hanos;kg;3,80
+granaatappel-136;Granaatappel;Fruit (vers);Sligro;stuk;1,90
+yuzu-seizoen-137;Yuzu (seizoen);Fruit (vers);Sligro;kg;38,00
+rabarber-138;Rabarber;Fruit (vers);Beide;kg;3,40
+meloen-cantaloupe-139;Meloen cantaloupe;Fruit (vers);Hanos;stuk;2,80
+kersen-140;Kersen;Fruit (vers);Beide;kg;7,50
+aardappel-vastkokend-nicola-141;Aardappel vastkokend (Nicola);Aardappel & Knollen;Beide;kg;1,10
+aardappel-kruimig-bintje-142;Aardappel kruimig (Bintje);Aardappel & Knollen;Hanos;kg;0,95
+krieltjes-143;Krieltjes;Aardappel & Knollen;Beide;kg;1,60
+zoete-aardappel-144;Zoete aardappel;Aardappel & Knollen;Hanos;kg;1,80
+frites-10mm-vers-145;Frites 10mm vers;Aardappel & Knollen;Beide;kg;1,50
+pommes-noisette-dv-146;Pommes noisette (dv);Aardappel & Knollen;Sligro;kg;2,40
+aardappelpuree-vlokken-147;Aardappelpuree vlokken;Aardappel & Knollen;Sligro;zak;6,50
+rosti-rauw-148;Rösti rauw;Aardappel & Knollen;Beide;kg;2,90
+peterselie-platte-149;Peterselie platte;Verse Kruiden;Sligro;bos;0,95
+peterselie-krul-150;Peterselie krul;Verse Kruiden;Hanos;bos;0,95
+bieslook-151;Bieslook;Verse Kruiden;Hanos;bos;1,40
+basilicum-152;Basilicum;Verse Kruiden;Beide;bak;1,90
+koriander-153;Koriander;Verse Kruiden;Hanos;bos;1,10
+munt-154;Munt;Verse Kruiden;Beide;bos;1,20
+dille-155;Dille;Verse Kruiden;Sligro;bos;1,30
+tijm-156;Tijm;Verse Kruiden;Sligro;bos;1,60
+rozemarijn-157;Rozemarijn;Verse Kruiden;Beide;bos;1,60
+salie-158;Salie;Verse Kruiden;Sligro;bos;1,70
+dragon-159;Dragon;Verse Kruiden;Hanos;bos;1,90
+kervel-160;Kervel;Verse Kruiden;Sligro;bos;1,80
+laurier-vers-161;Laurier vers;Verse Kruiden;Beide;bos;2,10
+oregano-vers-162;Oregano vers;Verse Kruiden;Hanos;bos;1,70
+zwarte-peper-gemalen-163;Zwarte peper gemalen;Specerijen & Droge Kruiden;Hanos;kg;18,00
+zwarte-peperkorrels-164;Zwarte peperkorrels;Specerijen & Droge Kruiden;Hanos;kg;16,50
+witte-peper-165;Witte peper;Specerijen & Droge Kruiden;Beide;kg;22,00
+paprikapoeder-zoet-166;Paprikapoeder zoet;Specerijen & Droge Kruiden;Sligro;kg;9,50
+paprikapoeder-gerookt-167;Paprikapoeder gerookt;Specerijen & Droge Kruiden;Beide;kg;14,00
+komijn-gemalen-168;Komijn gemalen;Specerijen & Droge Kruiden;Beide;kg;12,00
+korianderzaad-169;Korianderzaad;Specerijen & Droge Kruiden;Beide;kg;10,50
+kurkuma-170;Kurkuma;Specerijen & Droge Kruiden;Hanos;kg;8,90
+kerrie-madras-171;Kerrie madras;Specerijen & Droge Kruiden;Sligro;kg;11,00
+garam-masala-172;Garam masala;Specerijen & Droge Kruiden;Sligro;kg;16,00
+kaneel-stokjes-173;Kaneel stokjes;Specerijen & Droge Kruiden;Sligro;kg;19,00
+kaneel-gemalen-174;Kaneel gemalen;Specerijen & Droge Kruiden;Beide;kg;12,50
+nootmuskaat-heel-175;Nootmuskaat heel;Specerijen & Droge Kruiden;Beide;kg;28,00
+kruidnagel-176;Kruidnagel;Specerijen & Droge Kruiden;Hanos;kg;24,00
+kardemom-groen-177;Kardemom groen;Specerijen & Droge Kruiden;Beide;kg;42,00
+steranijs-178;Steranijs;Specerijen & Droge Kruiden;Sligro;kg;26,00
+venkelzaad-179;Venkelzaad;Specerijen & Droge Kruiden;Hanos;kg;11,00
+mosterdzaad-180;Mosterdzaad;Specerijen & Droge Kruiden;Beide;kg;7,50
+chilivlokken-181;Chilivlokken;Specerijen & Droge Kruiden;Sligro;kg;13,00
+cayennepeper-182;Cayennepeper;Specerijen & Droge Kruiden;Beide;kg;14,50
+saffraan-1g-183;Saffraan (1g);Specerijen & Droge Kruiden;Sligro;gram;6,50
+vanillestokjes-10-st-184;Vanillestokjes (10 st);Specerijen & Droge Kruiden;Beide;doos;24,00
+laurierblad-gedroogd-185;Laurierblad gedroogd;Specerijen & Droge Kruiden;Sligro;kg;12,00
+italiaanse-kruidenmix-186;Italiaanse kruidenmix;Specerijen & Droge Kruiden;Hanos;kg;9,50
+proven-aalse-kruiden-187;Provençaalse kruiden;Specerijen & Droge Kruiden;Hanos;kg;9,00
+ras-el-hanout-188;Ras el hanout;Specerijen & Droge Kruiden;Hanos;kg;17,00
+za-atar-189;Za'atar;Specerijen & Droge Kruiden;Sligro;kg;16,00
+sumak-190;Sumak;Specerijen & Droge Kruiden;Hanos;kg;15,00
+fijn-zeezout-191;Fijn zeezout;Zout & Basis;Beide;kg;1,40
+grof-zeezout-192;Grof zeezout;Zout & Basis;Hanos;kg;1,60
+fleur-de-sel-193;Fleur de sel;Zout & Basis;Sligro;kg;18,00
+maldon-zoutvlokken-194;Maldon zoutvlokken;Zout & Basis;Beide;kg;22,00
+peper-zout-mix-195;Peper-zout mix;Zout & Basis;Beide;kg;6,00
+bakpoeder-196;Bakpoeder;Zout & Basis;Sligro;kg;4,20
+baksoda-197;Baksoda;Zout & Basis;Hanos;kg;3,80
+gist-vers-198;Gist vers;Zout & Basis;Hanos;kg;5,50
+gist-gedroogd-199;Gist gedroogd;Zout & Basis;Beide;kg;9,50
+volle-melk-200;Volle melk;Zuivel;Hanos;L;1,10
+halfvolle-melk-201;Halfvolle melk;Zuivel;Beide;L;1,00
+slagroom-35-202;Slagroom 35%;Zuivel;Sligro;L;4,20
+kookroom-20-203;Kookroom 20%;Zuivel;Beide;L;2,90
+creme-fraiche-204;Crème fraîche;Zuivel;Sligro;kg;5,50
+zure-room-205;Zure room;Zuivel;Sligro;kg;4,80
+karnemelk-206;Karnemelk;Zuivel;Beide;L;1,20
+roomboter-ongezouten-207;Roomboter ongezouten;Zuivel;Beide;kg;9,80
+roomboter-gezouten-208;Roomboter gezouten;Zuivel;Sligro;kg;9,90
+geklaarde-boter-ghee-209;Geklaarde boter / ghee;Zuivel;Hanos;kg;13,50
+mascarpone-210;Mascarpone;Zuivel;Sligro;kg;7,80
+ricotta-211;Ricotta;Zuivel;Beide;kg;6,50
+yoghurt-griekse-212;Yoghurt Griekse;Zuivel;Beide;kg;4,90
+hangop-kwark-213;Hangop / kwark;Zuivel;Beide;kg;4,20
+buffelmozzarella-214;Buffelmozzarella;Zuivel;Beide;kg;12,00
+burrata-per-stuk-215;Burrata (per stuk);Zuivel;Beide;stuk;2,80
+parmigiano-reggiano-24mnd-216;Parmigiano Reggiano 24mnd;Kaas;Sligro;kg;22,00
+grana-padano-217;Grana Padano;Kaas;Sligro;kg;16,50
+pecorino-romano-218;Pecorino Romano;Kaas;Beide;kg;19,00
+gruyere-aop-219;Gruyère AOP;Kaas;Beide;kg;18,50
+comte-18mnd-220;Comté 18mnd;Kaas;Hanos;kg;21,00
+emmentaler-221;Emmentaler;Kaas;Hanos;kg;11,50
+cheddar-mature-222;Cheddar mature;Kaas;Beide;kg;12,00
+gouda-jong-belegen-223;Gouda jong belegen;Kaas;Sligro;kg;8,50
+oude-gouda-224;Oude Gouda;Kaas;Hanos;kg;12,50
+brie-de-meaux-225;Brie de Meaux;Kaas;Sligro;kg;14,00
+camembert-226;Camembert;Kaas;Sligro;kg;13,00
+gorgonzola-dolce-227;Gorgonzola dolce;Kaas;Hanos;kg;15,00
+roquefort-aop-228;Roquefort AOP;Kaas;Sligro;kg;24,00
+geitenkaas-log-229;Geitenkaas log;Kaas;Hanos;kg;13,50
+feta-griekse-pdo-230;Feta (Griekse PDO);Kaas;Beide;kg;9,80
+halloumi-231;Halloumi;Kaas;Beide;kg;11,00
+mozzarella-fior-di-latte-232;Mozzarella fior di latte;Kaas;Sligro;kg;7,50
+manchego-curado-233;Manchego curado;Kaas;Beide;kg;19,50
+scharreleieren-m-tray-30-234;Scharreleieren M (tray 30);Eieren;Beide;tray;7,20
+vrije-uitloop-eieren-l-tray-30-235;Vrije uitloop eieren L (tray 30);Eieren;Hanos;tray;9,50
+eidooier-pasteurised-236;Eidooier pasteurised;Eieren;Sligro;L;8,50
+eiwit-pasteurised-237;Eiwit pasteurised;Eieren;Beide;L;4,50
+heel-ei-vloeibaar-238;Heel ei vloeibaar;Eieren;Hanos;L;5,80
+kwarteleitjes-24-st-239;Kwarteleitjes (24 st);Eieren;Beide;doos;6,50
+extra-vergine-olijfolie-240;Extra vergine olijfolie;Oliën & Vetten;Beide;L;9,50
+olijfolie-mild-bak-241;Olijfolie mild (bak);Oliën & Vetten;Hanos;L;6,50
+zonnebloemolie-242;Zonnebloemolie;Oliën & Vetten;Sligro;L;2,80
+arachideolie-frituur-243;Arachideolie (frituur);Oliën & Vetten;Sligro;L;3,50
+raapzaad-koolzaadolie-244;Raapzaad/koolzaadolie;Oliën & Vetten;Sligro;L;3,20
+truffelolie-wit-245;Truffelolie wit;Oliën & Vetten;Beide;fles;12,00
+sesamolie-geroosterd-246;Sesamolie geroosterd;Oliën & Vetten;Beide;fles;9,50
+walnootolie-247;Walnootolie;Oliën & Vetten;Hanos;fles;14,00
+frituurvet-vast-248;Frituurvet vast;Oliën & Vetten;Beide;kg;2,40
+kokosolie-249;Kokosolie;Oliën & Vetten;Hanos;kg;6,80
+balsamico-di-modena-igp-250;Balsamico di Modena IGP;Azijn & Zuren;Hanos;fles;7,50
+balsamico-crema-251;Balsamico crema;Azijn & Zuren;Beide;fles;6,00
+witte-wijnazijn-252;Witte wijnazijn;Azijn & Zuren;Hanos;L;3,20
+rode-wijnazijn-253;Rode wijnazijn;Azijn & Zuren;Hanos;L;3,40
+sherryazijn-254;Sherryazijn;Azijn & Zuren;Sligro;fles;6,50
+appelazijn-255;Appelazijn;Azijn & Zuren;Sligro;L;3,00
+rijstazijn-256;Rijstazijn;Azijn & Zuren;Beide;fles;4,50
+citroensap-concentraat-257;Citroensap concentraat;Azijn & Zuren;Hanos;L;4,80
+sojasaus-kikkoman-258;Sojasaus (Kikkoman);Sauzen & Condimenten;Sligro;fles;5,50
+ketjap-manis-259;Ketjap manis;Sauzen & Condimenten;Sligro;fles;5,00
+vissaus-nam-pla-260;Vissaus (nam pla);Sauzen & Condimenten;Sligro;fles;4,20
+oestersaus-261;Oestersaus;Sauzen & Condimenten;Sligro;fles;4,80
+sriracha-262;Sriracha;Sauzen & Condimenten;Hanos;fles;4,00
+sambal-oelek-263;Sambal oelek;Sauzen & Condimenten;Beide;pot;4,50
+worcestershire-saus-264;Worcestershire saus;Sauzen & Condimenten;Sligro;fles;5,20
+tabasco-265;Tabasco;Sauzen & Condimenten;Beide;fles;6,50
+dijonmosterd-266;Dijonmosterd;Sauzen & Condimenten;Beide;pot;4,80
+grove-mosterd-267;Grove mosterd;Sauzen & Condimenten;Sligro;pot;4,50
+mayonaise-10kg-emmer-268;Mayonaise (10kg emmer);Sauzen & Condimenten;Beide;emmer;32,00
+ketchup-5l-269;Ketchup (5L);Sauzen & Condimenten;Beide;can;11,00
+tomatenpuree-3x-270;Tomatenpuree (3x);Sauzen & Condimenten;Beide;blik;5,50
+pesto-genovese-271;Pesto genovese;Sauzen & Condimenten;Hanos;pot;6,50
+tahini-272;Tahini;Sauzen & Condimenten;Beide;pot;7,00
+hoisinsaus-273;Hoisinsaus;Sauzen & Condimenten;Sligro;fles;4,90
+teriyakisaus-274;Teriyakisaus;Sauzen & Condimenten;Sligro;fles;5,20
+honing-acacia-275;Honing (acacia);Sauzen & Condimenten;Beide;kg;9,50
+ahornsiroop-276;Ahornsiroop;Sauzen & Condimenten;Beide;fles;9,00
+miso-wit-shiro-277;Miso wit (shiro);Sauzen & Condimenten;Beide;kg;12,00
+miso-rood-278;Miso rood;Sauzen & Condimenten;Beide;kg;13,50
+spaghetti-de-cecco-279;Spaghetti (De Cecco);Pasta, Rijst & Granen;Beide;kg;2,40
+penne-rigate-280;Penne rigate;Pasta, Rijst & Granen;Sligro;kg;2,30
+tagliatelle-nido-281;Tagliatelle nido;Pasta, Rijst & Granen;Hanos;kg;3,10
+linguine-282;Linguine;Pasta, Rijst & Granen;Beide;kg;2,60
+risottorijst-arborio-283;Risottorijst Arborio;Pasta, Rijst & Granen;Hanos;kg;3,80
+carnaroli-rijst-284;Carnaroli rijst;Pasta, Rijst & Granen;Beide;kg;4,90
+sushirijst-koshihikari-285;Sushirijst koshihikari;Pasta, Rijst & Granen;Sligro;kg;3,95
+basmati-rijst-286;Basmati rijst;Pasta, Rijst & Granen;Beide;kg;2,90
+jasmijnrijst-287;Jasmijnrijst;Pasta, Rijst & Granen;Beide;kg;2,70
+paella-rijst-bomba-288;Paella rijst (bomba);Pasta, Rijst & Granen;Beide;kg;5,50
+polenta-maisgriesmeel-289;Polenta (maïsgriesmeel);Pasta, Rijst & Granen;Hanos;kg;2,80
+couscous-290;Couscous;Pasta, Rijst & Granen;Sligro;kg;2,60
+bulgur-291;Bulgur;Pasta, Rijst & Granen;Hanos;kg;2,90
+quinoa-292;Quinoa;Pasta, Rijst & Granen;Sligro;kg;5,50
+parelgort-293;Parelgort;Pasta, Rijst & Granen;Beide;kg;2,40
+havermout-294;Havermout;Pasta, Rijst & Granen;Hanos;kg;2,10
+lasagnebladen-295;Lasagnebladen;Pasta, Rijst & Granen;Beide;kg;3,20
+gnocchi-vers-296;Gnocchi vers;Pasta, Rijst & Granen;Beide;kg;4,50
+noedels-egg-297;Noedels (egg) ;Pasta, Rijst & Granen;Beide;kg;3,40
+rijstnoedels-298;Rijstnoedels;Pasta, Rijst & Granen;Sligro;kg;3,80
+panko-paneermeel-299;Panko paneermeel;Pasta, Rijst & Granen;Hanos;kg;4,20
+paneermeel-fijn-300;Paneermeel fijn;Pasta, Rijst & Granen;Hanos;kg;2,40
+kikkererwten-gedroogd-301;Kikkererwten gedroogd;Peulvruchten & Conserven;Sligro;kg;2,80
+kikkererwten-blik-2-5kg-302;Kikkererwten blik (2.5kg);Peulvruchten & Conserven;Hanos;blik;5,50
+witte-bonen-blik-303;Witte bonen blik;Peulvruchten & Conserven;Sligro;blik;4,80
+bruine-linzen-304;Bruine linzen;Peulvruchten & Conserven;Beide;kg;3,20
+beluga-linzen-305;Beluga linzen;Peulvruchten & Conserven;Hanos;kg;5,50
+rode-linzen-306;Rode linzen;Peulvruchten & Conserven;Beide;kg;3,40
+zwarte-bonen-blik-307;Zwarte bonen blik;Peulvruchten & Conserven;Hanos;blik;4,90
+cannellini-bonen-308;Cannellini bonen;Peulvruchten & Conserven;Hanos;blik;5,00
+tomaten-gepeld-3x-a10-309;Tomaten gepeld (3x A10);Peulvruchten & Conserven;Beide;blik;6,50
+tomatenblokjes-3x-310;Tomatenblokjes (3x);Peulvruchten & Conserven;Beide;blik;6,20
+passata-di-pomodoro-311;Passata di pomodoro;Peulvruchten & Conserven;Hanos;fles;2,80
+artisjokharten-op-olie-312;Artisjokharten op olie;Peulvruchten & Conserven;Sligro;pot;7,50
+olijven-kalamata-ontpit-313;Olijven kalamata ontpit;Peulvruchten & Conserven;Hanos;kg;8,50
+groene-olijven-314;Groene olijven;Peulvruchten & Conserven;Sligro;kg;7,50
+kappertjes-315;Kappertjes;Peulvruchten & Conserven;Sligro;pot;6,50
+ansjovisfilet-op-olie-316;Ansjovisfilet op olie;Peulvruchten & Conserven;Sligro;blik;5,80
+tonijn-in-olie-a10-317;Tonijn in olie (A10);Peulvruchten & Conserven;Sligro;blik;12,50
+mais-blik-318;Mais blik;Peulvruchten & Conserven;Hanos;blik;4,20
+cornichons-319;Cornichons;Peulvruchten & Conserven;Beide;pot;5,50
+zongedroogde-tomaten-320;Zongedroogde tomaten;Peulvruchten & Conserven;Sligro;pot;7,80
+amandelen-blank-321;Amandelen blank;Noten, Zaden & Pitten;Hanos;kg;12,50
+amandelschaafsel-322;Amandelschaafsel;Noten, Zaden & Pitten;Beide;kg;13,00
+walnoten-323;Walnoten;Noten, Zaden & Pitten;Sligro;kg;14,00
+hazelnoten-324;Hazelnoten;Noten, Zaden & Pitten;Sligro;kg;13,50
+pistache-ongezouten-325;Pistache ongezouten;Noten, Zaden & Pitten;Beide;kg;22,00
+cashew-326;Cashew;Noten, Zaden & Pitten;Beide;kg;14,50
+pijnboompitten-327;Pijnboompitten;Noten, Zaden & Pitten;Beide;kg;32,00
+pecannoten-328;Pecannoten;Noten, Zaden & Pitten;Beide;kg;18,00
+sesamzaad-329;Sesamzaad;Noten, Zaden & Pitten;Beide;kg;11,00
+zwart-sesamzaad-330;Zwart sesamzaad;Noten, Zaden & Pitten;Hanos;kg;16,00
+zonnebloempitten-331;Zonnebloempitten;Noten, Zaden & Pitten;Beide;kg;4,50
+pompoenpitten-332;Pompoenpitten;Noten, Zaden & Pitten;Hanos;kg;8,50
+lijnzaad-333;Lijnzaad;Noten, Zaden & Pitten;Beide;kg;4,20
+chiazaad-334;Chiazaad;Noten, Zaden & Pitten;Hanos;kg;9,50
+kokosrasp-335;Kokosrasp;Noten, Zaden & Pitten;Beide;kg;5,50
+tarwebloem-patent-336;Tarwebloem patent;Bakkerij, Meel & Bloem;Beide;kg;1,20
+volkorenmeel-337;Volkorenmeel;Bakkerij, Meel & Bloem;Sligro;kg;1,40
+tipo-00-pizzabloem-338;Tipo 00 pizzabloem;Bakkerij, Meel & Bloem;Beide;kg;1,90
+maizena-339;Maïzena;Bakkerij, Meel & Bloem;Sligro;kg;2,40
+rijstmeel-340;Rijstmeel;Bakkerij, Meel & Bloem;Sligro;kg;3,20
+amandelmeel-341;Amandelmeel;Bakkerij, Meel & Bloem;Sligro;kg;14,00
+griesmeel-semolina-342;Griesmeel (semolina);Bakkerij, Meel & Bloem;Beide;kg;2,20
+roggemeel-343;Roggemeel;Bakkerij, Meel & Bloem;Sligro;kg;1,80
+speltbloem-344;Speltbloem;Bakkerij, Meel & Bloem;Hanos;kg;2,60
+gelatine-blaadjes-345;Gelatine blaadjes;Bakkerij, Meel & Bloem;Beide;doos;9,50
+agar-agar-346;Agar agar;Bakkerij, Meel & Bloem;Sligro;kg;28,00
+xanthaangom-347;Xanthaangom;Bakkerij, Meel & Bloem;Sligro;kg;24,00
+cacaopoeder-348;Cacaopoeder;Bakkerij, Meel & Bloem;Beide;kg;9,50
+pure-chocolade-70-callets-349;Pure chocolade 70% (callets);Bakkerij, Meel & Bloem;Beide;kg;11,50
+melkchocolade-callets-350;Melkchocolade callets;Bakkerij, Meel & Bloem;Beide;kg;10,50
+witte-chocolade-callets-351;Witte chocolade callets;Bakkerij, Meel & Bloem;Beide;kg;11,00
+bakpapier-rollen-352;Bakpapier rollen;Bakkerij, Meel & Bloem;Beide;rol;6,50
+croissant-deeg-rauw-dv-353;Croissant deeg rauw (dv);Bakkerij, Meel & Bloem;Beide;doos;18,00
+kristalsuiker-354;Kristalsuiker;Suiker & Zoetwaren;Sligro;kg;1,30
+basterdsuiker-bruin-355;Basterdsuiker bruin;Suiker & Zoetwaren;Beide;kg;1,60
+poedersuiker-356;Poedersuiker;Suiker & Zoetwaren;Beide;kg;1,90
+rietsuiker-ruw-357;Rietsuiker ruw;Suiker & Zoetwaren;Beide;kg;2,40
+glucosestroop-358;Glucosestroop;Suiker & Zoetwaren;Beide;kg;3,50
+honingraat-359;Honingraat;Suiker & Zoetwaren;Hanos;stuk;6,50
+fondant-360;Fondant;Suiker & Zoetwaren;Sligro;kg;4,20
+marsepein-361;Marsepein;Suiker & Zoetwaren;Sligro;kg;6,50
+vanille-extract-362;Vanille-extract;Suiker & Zoetwaren;Beide;fles;14,00
+amandelpasta-363;Amandelpasta;Suiker & Zoetwaren;Hanos;kg;7,50
+nori-vellen-50-st-364;Nori vellen (50 st);Aziatisch & Wereldkeuken;Beide;doos;9,50
+wakame-gedroogd-365;Wakame gedroogd;Aziatisch & Wereldkeuken;Beide;zak;8,50
+dashi-poeder-366;Dashi poeder;Aziatisch & Wereldkeuken;Hanos;pot;7,50
+mirin-367;Mirin;Aziatisch & Wereldkeuken;Hanos;fles;9,50
+sake-kook-368;Sake (kook);Aziatisch & Wereldkeuken;Sligro;fles;14,00
+rijstwijn-shaoxing-369;Rijstwijn shaoxing;Aziatisch & Wereldkeuken;Hanos;fles;6,50
+wasabipasta-370;Wasabipasta;Aziatisch & Wereldkeuken;Hanos;tube;5,50
+gember-gepekeld-gari-371;Gember gepekeld (gari);Aziatisch & Wereldkeuken;Hanos;pot;6,00
+currypasta-rood-thai-372;Currypasta rood (Thai);Aziatisch & Wereldkeuken;Sligro;pot;5,20
+currypasta-groen-373;Currypasta groen;Aziatisch & Wereldkeuken;Beide;pot;5,20
+kokosmelk-a10-3x-374;Kokosmelk (A10/3x);Aziatisch & Wereldkeuken;Beide;blik;6,80
+tamarindepasta-375;Tamarindepasta;Aziatisch & Wereldkeuken;Beide;pot;5,50
+gochujang-376;Gochujang;Aziatisch & Wereldkeuken;Sligro;pot;6,50
+kimchi-377;Kimchi;Aziatisch & Wereldkeuken;Beide;kg;8,50
+tofu-stevig-378;Tofu stevig;Aziatisch & Wereldkeuken;Beide;kg;4,50
+tortilla-wraps-18x-379;Tortilla wraps (18x);Aziatisch & Wereldkeuken;Hanos;pak;4,80
+wonton-vellen-380;Wonton vellen;Aziatisch & Wereldkeuken;Hanos;pak;4,20
+bao-buns-dv-381;Bao buns (dv);Aziatisch & Wereldkeuken;Sligro;doos;12,00
+kippenfond-basis-382;Kippenfond basis;Bouillon & Fonds;Beide;L;6,50
+kalfsfond-bruin-383;Kalfsfond bruin;Bouillon & Fonds;Beide;L;9,50
+groentebouillon-384;Groentebouillon;Bouillon & Fonds;Hanos;L;5,50
+visfumet-385;Visfumet;Bouillon & Fonds;Hanos;L;8,50
+demi-glace-386;Demi-glace;Bouillon & Fonds;Hanos;pot;18,00
+runderbouillon-pasta-387;Runderbouillon pasta;Bouillon & Fonds;Beide;pot;14,00
+gevogeltejus-388;Gevogeltejus;Bouillon & Fonds;Sligro;pot;19,00
+bladerdeeg-plakken-dv-389;Bladerdeeg plakken (dv);Diepvries;Sligro;doos;9,50
+filodeeg-dv-390;Filodeeg (dv);Diepvries;Sligro;pak;5,50
+doperwten-fijn-dv-391;Doperwten fijn (dv);Diepvries;Beide;kg;2,40
+spinazie-a-la-creme-dv-392;Spinazie à la crème (dv);Diepvries;Beide;kg;3,20
+frambozen-dv-393;Frambozen (dv);Diepvries;Beide;kg;6,50
+gemengd-zomerfruit-dv-394;Gemengd zomerfruit (dv);Diepvries;Hanos;kg;5,80
+frites-10mm-dv-395;Frites 10mm (dv);Diepvries;Hanos;kg;1,60
+garnalen-26-30-dv-396;Garnalen 26/30 (dv);Diepvries;Sligro;kg;16,00
+edamame-dv-397;Edamame (dv);Diepvries;Sligro;kg;5,50
+vanille-ijs-basis-dv-398;Vanille-ijs basis (dv);Diepvries;Hanos;bak;8,50
+tonic-water-24x-399;Tonic water (24x);Dranken (non-alcohol);Beide;tray;18,00
+spa-rood-24x-400;Spa rood (24x);Dranken (non-alcohol);Hanos;tray;9,50
+spa-blauw-24x-401;Spa blauw (24x);Dranken (non-alcohol);Beide;tray;9,00
+sinaasappelsap-vers-402;Sinaasappelsap vers;Dranken (non-alcohol);Sligro;L;3,50
+appelsap-troebel-403;Appelsap troebel;Dranken (non-alcohol);Beide;L;2,40
+cola-24x-404;Cola (24x);Dranken (non-alcohol);Hanos;tray;16,00
+gemberbier-24x-405;Gemberbier (24x);Dranken (non-alcohol);Sligro;tray;19,00
+espressobonen-1kg-406;Espressobonen (1kg);Dranken (non-alcohol);Beide;kg;18,00
+losse-thee-assorti-407;Losse thee assorti;Dranken (non-alcohol);Beide;pot;9,50
+kombucha-408;Kombucha;Dranken (non-alcohol);Beide;fles;3,20
+witte-kookwijn-409;Witte kookwijn;Wijn & Gedistilleerd (kook);Hanos;fles;4,50
+rode-kookwijn-410;Rode kookwijn;Wijn & Gedistilleerd (kook);Hanos;fles;4,80
+port-kook-411;Port (kook);Wijn & Gedistilleerd (kook);Beide;fles;9,50
+madeira-412;Madeira;Wijn & Gedistilleerd (kook);Beide;fles;11,00
+cognac-kook-413;Cognac (kook);Wijn & Gedistilleerd (kook);Hanos;fles;22,00
+pernod-pastis-414;Pernod / pastis;Wijn & Gedistilleerd (kook);Hanos;fles;16,00
+marsala-415;Marsala;Wijn & Gedistilleerd (kook);Beide;fles;9,00
+sherry-fino-416;Sherry (fino);Wijn & Gedistilleerd (kook);Hanos;fles;8,50

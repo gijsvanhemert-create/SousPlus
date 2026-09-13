@@ -1,0 +1,270 @@
+// SousPlus+ Premium — datamodel
+// Multi-tenant kern: Organization -> Location -> User.
+// Receptuur, catalogus en HACCP hangen aan een Location.
+// HACCP-records zijn append-only met hash-chaining (tamper-evident).
+// Geld = Decimal (nooit floats).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Multi-tenancy & auth
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String     @id @default(cuid())
+  name      String
+  locations Location[]
+  createdAt DateTime   @default(now())
+}
+
+model Location {
+  id    String @id @default(cuid())
+  orgId String
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name  String
+
+  users            User[]
+  recipes          Recipe[]
+  catalog          CatalogItem[]
+  haccpCheckpoints HaccpCheckpoint[]
+  haccpRecords     HaccpRecord[]
+  conversations    ChefConversation[]
+  alerts           MarginAlert[]
+
+  createdAt DateTime @default(now())
+
+  @@index([orgId])
+}
+
+model User {
+  id           String @id @default(cuid())
+  locationId   String
+  location     Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name         String
+  email        String @unique
+  passwordHash String // credentials-auth (bcrypt)
+  role         Role   @default(CHEF)
+
+  conversations ChefConversation[]
+
+  createdAt DateTime @default(now())
+
+  @@index([locationId])
+}
+
+enum Role {
+  OWNER
+  EXEC_CHEF
+  CHEF
+  STAFF
+}
+
+// ---------------------------------------------------------------------------
+// Receptuur & kosten
+// ---------------------------------------------------------------------------
+
+model Recipe {
+  id         String @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  dish       String // gerechtnaam
+  category   String
+  menuPrice  Decimal @db.Decimal(10, 2)
+  popularity Int     @default(0) // couverts p/m -> Menu Matrix
+  isOnMenu   Boolean @default(true) // Recipe Library
+  favorite   Boolean @default(false)
+
+  versions        RecipeVersion[]
+  activeVersion   RecipeVersion?  @relation("ActiveVersion", fields: [activeVersionId], references: [id])
+  activeVersionId String?         @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([locationId])
+}
+
+model RecipeVersion {
+  id          String @id @default(cuid())
+  recipeId    String
+  recipe      Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  label       String // "v1.2"
+  name        String // "Witte Miso"
+  note        String?
+  prepTimeMin Int
+  steps       String[] // bereidingswijze
+
+  ingredients   RecipeIngredient[]
+  activeForRecipe Recipe?          @relation("ActiveVersion")
+
+  createdAt DateTime @default(now())
+
+  @@index([recipeId])
+}
+
+model RecipeIngredient {
+  id            String  @id @default(cuid())
+  versionId     String
+  version       RecipeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  catalogItemId String? // koppeling naar catalogus (optioneel)
+  catalogItem   CatalogItem? @relation(fields: [catalogItemId], references: [id])
+  name          String
+  amount        Decimal  @db.Decimal(10, 3) // gram/ml (WEIGHT) of aantal (PIECE)
+  unit          String // g, ml, stuk, fles, ...
+  mode          CostMode @default(WEIGHT)
+  pricePerUnit  Decimal  @db.Decimal(10, 2) // snapshot; live prijs via CatalogItem/IngredientPrice
+
+  @@index([versionId])
+}
+
+enum CostMode {
+  WEIGHT // (amount/1000) * pricePerUnit  (prijs per kg/L)
+  PIECE // amount * pricePerUnit           (prijs per eenheid)
+}
+
+// ---------------------------------------------------------------------------
+// Catalogus (Hanos/Sligro), seed uit CSV
+// ---------------------------------------------------------------------------
+
+model CatalogItem {
+  id           String  @id @default(cuid())
+  locationId   String
+  location     Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  externalId   String? // SKU bij leverancier (voor live feed)
+  name         String
+  category     String
+  supplier     Supplier
+  unit         String
+  price        Decimal @db.Decimal(10, 2)
+
+  priceHistory     IngredientPrice[]
+  recipeIngredients RecipeIngredient[]
+
+  createdAt DateTime @default(now())
+
+  @@index([locationId, category])
+}
+
+enum Supplier {
+  HANOS
+  SLIGRO
+  BEIDE
+}
+
+model IngredientPrice {
+  id            String  @id @default(cuid())
+  catalogItemId String
+  item          CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  price         Decimal @db.Decimal(10, 2)
+  source        String // "feed:hanos" | "ocr" | "manual"
+  recordedAt    DateTime @default(now())
+
+  @@index([catalogItemId])
+}
+
+// ---------------------------------------------------------------------------
+// HACCP — append-only, tamper-evident
+// ---------------------------------------------------------------------------
+
+model HaccpCheckpoint {
+  id         String  @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  zone       String // "Koeling 1 . vis"
+  target     String // "<= 4 C"
+  limitValue Decimal @db.Decimal(8, 2)
+  cmp        Cmp
+  unit       String // "C"
+  active     Boolean @default(true)
+
+  @@index([locationId])
+}
+
+enum Cmp {
+  LTE
+  GTE
+}
+
+model HaccpRecord {
+  id           String      @id @default(cuid())
+  locationId   String
+  location     Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  checkpointId String
+  zone         String
+  target       String
+  value        Decimal     @db.Decimal(8, 2)
+  unit         String
+  status       HaccpStatus
+  recordedAt   DateTime    @default(now())
+  signedById   String
+  signedByName String
+  prevHash     String? // hash van vorige record (chain)
+  hash         String // hash(payload + prevHash)
+  // GEEN updatedAt / geen updates: records zijn onveranderlijk; correcties = nieuw record
+
+  @@index([locationId, recordedAt])
+}
+
+enum HaccpStatus {
+  OK
+  ATTENTION
+}
+
+// ---------------------------------------------------------------------------
+// Chef Auguste — persistente conversatie
+// ---------------------------------------------------------------------------
+
+model ChefConversation {
+  id         String  @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages   ChefMessage[]
+  createdAt  DateTime @default(now())
+
+  @@index([locationId, userId])
+}
+
+model ChefMessage {
+  id             String  @id @default(cuid())
+  conversationId String
+  conversation   ChefConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MsgRole
+  content        String // tekst of JSON (tool_use / tool_result)
+  toolName       String?
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId])
+}
+
+enum MsgRole {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+// ---------------------------------------------------------------------------
+// Marge-Waakhond
+// ---------------------------------------------------------------------------
+
+model MarginAlert {
+  id              String   @id @default(cuid())
+  locationId      String
+  location        Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  ingredient      String
+  deltaPct        Decimal  @db.Decimal(6, 2)
+  affectedRecipeId String?
+  resolved        Boolean  @default(false)
+  resolution      String?
+  createdAt       DateTime @default(now())
+
+  @@index([locationId])
+}
