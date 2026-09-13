@@ -260,11 +260,12 @@ const updateZod = z.object({
 
 const updateTool: ChefTool = {
   name: "update_recipe_version",
-  description: "Pas een bestaande receptversie aan. Geef alleen de velden mee die wijzigen.",
+  description:
+    "Pas een bestaande receptversie aan. id = het versie-id uit de APP-CONTEXT (activeVersion.id of een id uit versions), nooit een verzonnen of geraden id. Geef alleen de velden mee die wijzigen.",
   input_schema: {
     type: "object",
     properties: {
-      id: { type: "string" },
+      id: { type: "string", description: "Versie-id uit de APP-CONTEXT (activeVersion.id / versions[].id)." },
       name: { type: "string" },
       dish: { type: "string" },
       note: { type: "string" },
