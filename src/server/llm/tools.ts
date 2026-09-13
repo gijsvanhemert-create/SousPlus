@@ -239,8 +239,8 @@ const saveTool: ChefTool = {
     const href = `/lab?recipe=${encodeURIComponent(recipeId)}`;
     return {
       text: `Opgeslagen als ${label} · ${d.name}.`,
+      // Geen automatische navigatie: de gebruiker springt zelf via de knop.
       action: { kind: "recipe", label: `Opgeslagen: ${label} · ${d.name}`, href },
-      navigateTo: href,
     };
   },
 };
@@ -311,8 +311,8 @@ const updateTool: ChefTool = {
     const href = `/lab?recipe=${encodeURIComponent(version.recipeId)}`;
     return {
       text: "Receptversie bijgewerkt.",
+      // Geen automatische navigatie: de gebruiker springt zelf via de knop.
       action: { kind: "recipe", label: "Receptversie bijgewerkt", href },
-      navigateTo: href,
     };
   },
 };
@@ -381,8 +381,8 @@ const prepareHaccpTool: ChefTool = {
     });
     return {
       text: `Dagstaat klaargezet met ${active} registratiepunten.`,
+      // Geen automatische navigatie: de gebruiker springt zelf via de knop.
       action: { kind: "haccp", label: `HACCP-dagstaat klaar (${active} punten)`, href: "/haccp" },
-      navigateTo: "/haccp",
     };
   },
 };
@@ -449,7 +449,7 @@ const fillHaccpTool: ChefTool = {
         label: attention > 0 ? `${attention} meting(en) buiten norm` : "Alle metingen binnen norm",
         href: "/haccp",
       },
-      navigateTo: "/haccp",
+      // Geen automatische navigatie: de gebruiker springt zelf via de knop.
     };
   },
 };
@@ -474,8 +474,8 @@ const switchTool: ChefTool = {
     if (!res.switched) return { text: res.message };
     return {
       text: res.message,
+      // Geen automatische navigatie: de gebruiker springt zelf via de knop.
       action: { kind: "supplier", label: `Leverancier gewisseld: ${ingredient}`, detail: res.detail, href: "/supplier" },
-      navigateTo: "/supplier",
     };
   },
 };

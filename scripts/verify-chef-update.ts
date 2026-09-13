@@ -42,12 +42,18 @@ async function main() {
     detail: `pendingConfirmation=${JSON.stringify(step1.pendingConfirmation)}`,
   });
 
-  // 2. Met autoConfirm: voert de update uit en navigeert naar het JUISTE recept.
+  // 2. Met autoConfirm: voert de update uit en biedt een knop naar het JUISTE
+  //    recept — zonder automatisch weg te navigeren.
   const step2 = await runChefTurn({ locationId: user.locationId, userId: user.id, message: msg, autoConfirm: true });
   checks.push({
-    label: "Navigeert naar het specifieke recept in de Lab",
-    pass: step2.navigateTo === `/lab?recipe=${recipe.id}`,
+    label: "Navigeert NIET automatisch weg",
+    pass: step2.navigateTo === undefined,
     detail: `navigateTo=${step2.navigateTo}`,
+  });
+  checks.push({
+    label: "Biedt een knop naar het specifieke recept in de Lab",
+    pass: step2.actions.some((a) => a.href === `/lab?recipe=${recipe.id}`),
+    detail: `actions=${JSON.stringify(step2.actions)}`,
   });
   checks.push({
     label: "Rapporteert geen foutmelding / geen handmatige terugval",

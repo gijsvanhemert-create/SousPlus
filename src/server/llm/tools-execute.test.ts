@@ -64,11 +64,13 @@ beforeEach(() => {
 describe("update_recipe_version.execute", () => {
   const tool = TOOL_BY_NAME.get("update_recipe_version")!;
 
-  it("werkt een bestaande versie bij in de juiste tenant en opent het recept in de Lab", async () => {
+  it("werkt een bestaande versie bij in de juiste tenant en biedt een Lab-knop (zonder auto-navigatie)", async () => {
     const outcome = await tool.execute({ id: "ver_salmon_v12", menuPrice: 30 }, { locationId: LOC_A, userId: "u1" });
 
     expect(outcome.text).toContain("bijgewerkt");
-    expect(outcome.navigateTo).toBe("/lab?recipe=rec_salmon");
+    // Geen automatische navigatie meer; de gebruiker springt zelf via de knop.
+    expect(outcome.navigateTo).toBeUndefined();
+    expect(outcome.action?.href).toBe("/lab?recipe=rec_salmon");
     // Menuprijs-wijziging landt op het recept, genormaliseerd naar 2 decimalen.
     expect(mocks.recipeUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "rec_salmon" }, data: expect.objectContaining({ menuPrice: "30.00" }) }),
