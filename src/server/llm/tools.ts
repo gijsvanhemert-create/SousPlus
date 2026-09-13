@@ -3,6 +3,7 @@ import { prisma } from "@/server/db";
 import { CostMode } from "@/generated/prisma/enums";
 import { appendRecord } from "@/server/haccp/records";
 import { switchSupplierFor } from "@/server/supplier-switch";
+import { normalizeWeightUnit } from "@/lib/units";
 import type { ToolSchema } from "./types";
 
 // Server-side tool-definities voor Chef Auguste. Per tool:
@@ -49,9 +50,13 @@ const ING_JSON = {
     type: "object",
     properties: {
       name: { type: "string" },
-      g: { type: "number" },
-      unit: { type: "string" },
-      p: { type: "number" },
+      g: {
+        type: "number",
+        description:
+          "Hoeveelheid per couvert in GRAM (weight) of ml (volume), NIET in kg/L. Reken de catalogus-eenheid om: 0,08 kg = 80.",
+      },
+      unit: { type: "string", description: 'Alleen "g" of "ml" (weight), of een stukseenheid (piece). Nooit de catalogus-eenheid kg/L.' },
+      p: { type: "number", description: "Inkoopprijs per kg/L (weight) of per stuk (piece), zoals in de catalogus." },
       mode: { type: "string", enum: ["weight", "piece"] },
     },
   },
@@ -69,12 +74,17 @@ const ingredientZod = z.array(
 
 type IngredientInput = z.infer<typeof ingredientZod>[number];
 
+// WEIGHT-ingrediënten worden ALTIJD in gram/ml per couvert opgeslagen (zie
+// lib/units.ts): de catalogus-eenheid (kg/L) is alleen een prijsbasis en mag
+// nooit als opslag-eenheid worden overgenomen, anders krijg je onzin als
+// "80 kg per couvert". De unit normaliseren we server-side naar "g"/"ml"; de
+// hoeveelheid laten we ongemoeid (die is per contract al grammen/ml).
 function toIngredientCreate(i: IngredientInput) {
   const isPiece = i.mode === "piece";
   return {
     name: i.name,
     amount: i.g.toString(),
-    unit: i.unit ?? (isPiece ? "stuk" : "g"),
+    unit: isPiece ? (i.unit?.trim() || "stuk") : normalizeWeightUnit(i.unit),
     mode: isPiece ? CostMode.PIECE : CostMode.WEIGHT,
     pricePerUnit: i.p.toString(),
   };
@@ -225,10 +235,12 @@ const saveTool: ChefTool = {
       },
     });
 
+    // Open in de Lab exact het zojuist opgeslagen recept (niet het standaardgerecht).
+    const href = `/lab?recipe=${encodeURIComponent(recipeId)}`;
     return {
       text: `Opgeslagen als ${label} · ${d.name}.`,
-      action: { kind: "recipe", label: `Opgeslagen: ${label} · ${d.name}`, href: "/lab" },
-      navigateTo: "/lab",
+      action: { kind: "recipe", label: `Opgeslagen: ${label} · ${d.name}`, href },
+      navigateTo: href,
     };
   },
 };
@@ -294,10 +306,12 @@ const updateTool: ChefTool = {
         },
       });
     }
+    // Open in de Lab exact het zojuist bewerkte recept (niet het standaardgerecht).
+    const href = `/lab?recipe=${encodeURIComponent(version.recipeId)}`;
     return {
       text: "Receptversie bijgewerkt.",
-      action: { kind: "recipe", label: "Receptversie bijgewerkt", href: "/lab" },
-      navigateTo: "/lab",
+      action: { kind: "recipe", label: "Receptversie bijgewerkt", href },
+      navigateTo: href,
     };
   },
 };

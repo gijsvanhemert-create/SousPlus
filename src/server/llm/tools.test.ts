@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { TOOL_BY_NAME, TOOL_SCHEMAS, CHEF_TOOLS } from "./tools";
+import { normalizeWeightUnit } from "@/lib/units";
 
 function zodFor(name: string) {
   const tool = TOOL_BY_NAME.get(name);
@@ -36,6 +37,25 @@ describe("tool zod-validatie", () => {
   it("switch_supplier vereist een ingrediënt", () => {
     expect(zodFor("switch_supplier").safeParse({ ingredient: "roomboter" }).success).toBe(true);
     expect(zodFor("switch_supplier").safeParse({}).success).toBe(false);
+  });
+});
+
+describe("normalizeWeightUnit", () => {
+  it("dwingt gewichtsingrediënten naar g af, ook als het model kg aanlevert", () => {
+    // De bug: catalogus-eenheid "kg" werd als opslag-eenheid overgenomen.
+    expect(normalizeWeightUnit("kg")).toBe("g");
+    expect(normalizeWeightUnit("KG")).toBe("g");
+    expect(normalizeWeightUnit("gram")).toBe("g");
+    expect(normalizeWeightUnit(undefined)).toBe("g");
+    expect(normalizeWeightUnit("")).toBe("g");
+  });
+
+  it("herkent volume-eenheden en normaliseert naar ml", () => {
+    expect(normalizeWeightUnit("l")).toBe("ml");
+    expect(normalizeWeightUnit("L")).toBe("ml");
+    expect(normalizeWeightUnit("liter")).toBe("ml");
+    expect(normalizeWeightUnit("ml")).toBe("ml");
+    expect(normalizeWeightUnit("cl")).toBe("ml");
   });
 });
 
