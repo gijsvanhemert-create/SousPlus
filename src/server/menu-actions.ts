@@ -35,6 +35,17 @@ export async function deleteRecipe(input: { recipeId: string }) {
   });
   if (!recipe) throw new Error("Recept niet gevonden in deze locatie.");
 
+  // Beschermd: een recept dat elders als component wordt gebruikt, mag niet zomaar
+  // verdwijnen (dat zou de kostprijs van het parent-gerecht stilletjes breken).
+  const usedIn = await prisma.recipeComponent.findMany({
+    where: { childRecipeId: recipeId },
+    select: { parentVersion: { select: { recipe: { select: { dish: true } } } } },
+  });
+  if (usedIn.length > 0) {
+    const dishes = Array.from(new Set(usedIn.map((u) => u.parentVersion.recipe.dish)));
+    throw new Error(`Kan niet verwijderen: wordt gebruikt als component in ${dishes.join(", ")}.`);
+  }
+
   await prisma.$transaction([
     prisma.recipe.update({ where: { id: recipeId }, data: { activeVersionId: null } }),
     prisma.recipe.delete({ where: { id: recipeId } }),

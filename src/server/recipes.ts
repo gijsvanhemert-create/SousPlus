@@ -13,7 +13,16 @@ export async function getLabRecipes(locationId: string): Promise<LabRecipe[]> {
     include: {
       versions: {
         orderBy: { createdAt: "asc" },
-        include: { ingredients: { orderBy: { id: "asc" } } },
+        include: {
+          ingredients: { orderBy: { id: "asc" } },
+          components: {
+            orderBy: { createdAt: "asc" },
+            include: {
+              childRecipe: { select: { dish: true, activeVersionId: true } },
+              childVersion: { select: { label: true } },
+            },
+          },
+        },
       },
     },
   });
@@ -34,6 +43,9 @@ export async function getLabRecipes(locationId: string): Promise<LabRecipe[]> {
       note: v.note,
       prepTimeMin: v.prepTimeMin,
       steps: v.steps,
+      yieldQty: v.yieldQty.toString(),
+      yieldUnit: v.yieldUnit,
+      yieldMode: v.yieldMode as CostMode,
       ingredients: v.ingredients.map((i) => ({
         id: i.id,
         catalogItemId: i.catalogItemId,
@@ -42,6 +54,17 @@ export async function getLabRecipes(locationId: string): Promise<LabRecipe[]> {
         unit: i.unit,
         mode: i.mode as CostMode,
         pricePerUnit: i.pricePerUnit.toString(),
+      })),
+      components: v.components.map((c) => ({
+        id: c.id,
+        childRecipeId: c.childRecipeId,
+        childVersionId: c.childVersionId,
+        name: c.childRecipe.dish,
+        versionLabel: c.childVersion.label,
+        childActiveVersionId: c.childRecipe.activeVersionId,
+        amount: c.amount.toString(),
+        unit: c.unit,
+        mode: c.mode as CostMode,
       })),
     })),
   }));
