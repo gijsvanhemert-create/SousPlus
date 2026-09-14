@@ -35,7 +35,12 @@ export async function setComponentOnly(input: { recipeId: string; value: boolean
   });
   if (!recipe) throw new Error("Recept niet gevonden in deze locatie.");
 
-  await prisma.recipe.update({ where: { id: recipeId }, data: { componentOnly: value } });
+  // Houd isOnMenu consistent: een alleen-component recept staat niet op de kaart,
+  // en terugzetten naar normaal maakt het weer verkoopbaar.
+  await prisma.recipe.update({
+    where: { id: recipeId },
+    data: { componentOnly: value, isOnMenu: !value },
+  });
   revalidatePath("/library");
   revalidatePath("/matrix");
   revalidatePath("/lab");

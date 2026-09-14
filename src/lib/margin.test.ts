@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isMarginCriticalPct, marginTextClass, marginChipClass } from "@/lib/margin";
+import { isMarginCriticalPct, marginTextClass, marginChipClass, marginApplies } from "@/lib/margin";
 
 describe("marge-styling", () => {
   it("n.v.t. (null) is nooit kritiek en krijgt een neutrale kleur", () => {
@@ -18,5 +18,12 @@ describe("marge-styling", () => {
     expect(isMarginCriticalPct(70)).toBe(false);
     expect(marginTextClass(72)).toBe("text-success");
     expect(marginChipClass(72)).toBe("bg-success-soft text-success");
+  });
+
+  it("marge is n.v.t. voor alleen-component recepten, ongeacht de menuprijs", () => {
+    expect(marginApplies(true, 24.5)).toBe(false); // componentOnly met prijs → geen marge
+    expect(marginApplies(true, 0)).toBe(false);
+    expect(marginApplies(false, 0)).toBe(false); // geen prijs → geen marge
+    expect(marginApplies(false, 24.5)).toBe(true); // normaal verkoopbaar gerecht
   });
 });

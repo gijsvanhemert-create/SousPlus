@@ -5,6 +5,15 @@
 
 export const MARGIN_CRITICAL_PCT = 70;
 
+/**
+ * Heeft een recept een zinvolle verkoopmarge? Nee voor alleen-component
+ * (sub-)recepten — ongeacht welke menuPrice er toevallig is opgeslagen — en nee
+ * zonder positieve menuprijs. Zulke recepten tonen "n.v.t." (neutraal).
+ */
+export function marginApplies(componentOnly: boolean, menuPrice: number): boolean {
+  return !componentOnly && menuPrice > 0;
+}
+
 /** Kritiek = er ís een marge én die ligt onder de grens. `null` is niet kritiek. */
 export function isMarginCriticalPct(marginPct: number | null, threshold = MARGIN_CRITICAL_PCT): boolean {
   return marginPct != null && marginPct < threshold;

@@ -23,7 +23,7 @@ import { Decimal } from "decimal.js";
 import { eur, pct } from "@/lib/format";
 import { ingredientCost, recipeFoodcost } from "@/lib/cost";
 import { computeVersionCosts, unitCostFor, type CostVersionNode } from "@/lib/component-cost";
-import { marginTextClass } from "@/lib/margin";
+import { marginTextClass, marginApplies } from "@/lib/margin";
 import type { LabRecipe, LabVersion, CatalogResult, CandidateRecipe } from "@/types/recipe";
 import {
   updateIngredientAmount,
@@ -147,10 +147,12 @@ export function RecipeLab({
         unitCost: unitCostFor(versionCosts, c.childVersionId),
       })),
     });
-    // Marge is alleen gedefinieerd bij een positieve menuprijs; sub-recepten
-    // kunnen €0 zijn (dan tonen we n.v.t. i.p.v. te crashen op recipeCost).
+    // Marge is n.v.t. voor alleen-component (sub-)recepten — ongeacht welke
+    // menuPrice er toevallig is opgeslagen — en zonder positieve prijs.
     const price = new Decimal(sanitize(recipe.menuPrice));
-    const marginPct = price.gt(0) ? price.sub(foodcostPerCover).div(price).mul(100) : null;
+    const marginPct = marginApplies(recipe.componentOnly, price.toNumber())
+      ? price.sub(foodcostPerCover).div(price).mul(100)
+      : null;
     return { foodcostPerCover, foodcostTotal: foodcostPerCover.mul(covers), marginPct };
   }, [recipe, version, covers, versionCosts]);
 
@@ -326,7 +328,7 @@ export function RecipeLab({
             <span className="text-[11px] text-muted">
               {version.label} · {version.name}
             </span>
-            {isActiveVersion && (
+            {isActiveVersion && !recipe.componentOnly && (
               <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-[10.5px] font-semibold text-success">
                 <BadgeCheck size={12} /> Op de kaart
               </span>

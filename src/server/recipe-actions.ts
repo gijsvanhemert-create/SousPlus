@@ -289,7 +289,11 @@ export async function addComponent(input: {
       },
     }),
     ...(autoMark
-      ? [prisma.recipe.update({ where: { id: childRecipeId }, data: { componentOnly: true } })]
+      ? [
+          // componentOnly en isOnMenu consistent houden: een component staat niet
+          // los op de kaart.
+          prisma.recipe.update({ where: { id: childRecipeId }, data: { componentOnly: true, isOnMenu: false } }),
+        ]
       : []),
   ]);
   revalidateRecipeSurfaces();

@@ -38,7 +38,10 @@ describe("addComponent auto-markering", () => {
     const res = await addComponent({ parentVersionId: "pv", childRecipeId: "child" });
 
     expect(res).toEqual({ autoMarkedComponentOnly: true, dish: "Beurre Blanc" });
-    expect(db.recipe.update).toHaveBeenCalledWith({ where: { id: "child" }, data: { componentOnly: true } });
+    expect(db.recipe.update).toHaveBeenCalledWith({
+      where: { id: "child" },
+      data: { componentOnly: true, isOnMenu: false },
+    });
     // Create + update in één transactie.
     expect(db.$transaction).toHaveBeenCalledWith(["createOp", "updateOp"]);
   });
