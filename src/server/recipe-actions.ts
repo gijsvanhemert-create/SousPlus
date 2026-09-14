@@ -7,6 +7,7 @@ import { prisma } from "@/server/db";
 import { getTenant } from "@/server/tenant";
 import { CostMode } from "@/generated/prisma/enums";
 import { assertComponentAllowed } from "@/server/recipe-cost-graph";
+import { linkComponent, type LinkComponentResult } from "@/server/components";
 import type { CatalogResult, CandidateRecipe } from "@/types/recipe";
 
 // Mutaties op de Recipe Lab. Elke actie:
@@ -234,9 +235,10 @@ export async function searchRecipesForComponent(
   return candidates;
 }
 
-export type AddComponentResult = { autoMarkedComponentOnly: boolean; dish: string };
+export type AddComponentResult = LinkComponentResult;
 
-/** Voeg een component toe; pint op de actieve versie van het kind-recept. */
+/** Voeg een component toe (UI-action); pint op de actieve versie van het kind-recept.
+ * Dunne wrapper rond de gedeelde linkComponent-kern. */
 export async function addComponent(input: {
   parentVersionId: string;
   childRecipeId: string;
@@ -246,58 +248,9 @@ export async function addComponent(input: {
     .object({ parentVersionId: z.string().min(1), childRecipeId: z.string().min(1) })
     .parse(input);
 
-  const [parentVersion, child] = await Promise.all([
-    prisma.recipeVersion.findFirst({
-      where: { id: parentVersionId, recipe: { locationId } },
-      select: { id: true, recipeId: true, components: { select: { childRecipeId: true } } },
-    }),
-    prisma.recipe.findFirst({
-      where: { id: childRecipeId, locationId },
-      select: {
-        id: true,
-        dish: true,
-        componentOnly: true,
-        activeVersion: { select: { id: true, yieldQty: true, yieldUnit: true, yieldMode: true } },
-      },
-    }),
-  ]);
-  if (!parentVersion) throw new Error("Receptversie niet gevonden in deze locatie.");
-  if (!child?.activeVersion) throw new Error("Component-recept heeft geen actieve versie.");
-
-  // Idempotent: geen dubbele component in dezelfde versie.
-  if (parentVersion.components.some((c) => c.childRecipeId === childRecipeId)) {
-    revalidateRecipeSurfaces();
-    return;
-  }
-
-  await assertComponentAllowed(locationId, parentVersion.recipeId, childRecipeId);
-
-  // Default: één volledige portie van het kind (amount = yieldQty), zelfde eenheid/mode.
-  // Markeer het kind meteen als "alleen component" als het dat nog niet is, zodat een
-  // saus die als los recept is opgeslagen niet tussen de menu-gerechten blijft staan.
-  // Blijft een default: de chef kan het via de Lab-toggle bewust terugzetten.
-  const autoMark = !child.componentOnly;
-  await prisma.$transaction([
-    prisma.recipeComponent.create({
-      data: {
-        parentVersionId,
-        childRecipeId,
-        childVersionId: child.activeVersion.id,
-        amount: child.activeVersion.yieldQty.toString(),
-        unit: child.activeVersion.yieldUnit,
-        mode: child.activeVersion.yieldMode,
-      },
-    }),
-    ...(autoMark
-      ? [
-          // componentOnly en isOnMenu consistent houden: een component staat niet
-          // los op de kaart.
-          prisma.recipe.update({ where: { id: childRecipeId }, data: { componentOnly: true, isOnMenu: false } }),
-        ]
-      : []),
-  ]);
+  const res = await linkComponent({ locationId, parentVersionId, childRecipeId });
   revalidateRecipeSurfaces();
-  return { autoMarkedComponentOnly: autoMark, dish: child.dish };
+  return res;
 }
 
 /** Pas de gebruikte hoeveelheid van een component aan (per couvert van de parent). */

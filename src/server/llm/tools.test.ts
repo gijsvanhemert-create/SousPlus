@@ -38,6 +38,18 @@ describe("tool zod-validatie", () => {
     expect(zodFor("switch_supplier").safeParse({ ingredient: "roomboter" }).success).toBe(true);
     expect(zodFor("switch_supplier").safeParse({}).success).toBe(false);
   });
+
+  it("link_component vereist parent- én child-recipeId", () => {
+    expect(zodFor("link_component").safeParse({ parentRecipeId: "p", childRecipeId: "c" }).success).toBe(true);
+    expect(zodFor("link_component").safeParse({ parentRecipeId: "p" }).success).toBe(false);
+    expect(zodFor("link_component").safeParse({}).success).toBe(false);
+  });
+
+  it("save_recipe_version accepteert optioneel asComponentOf", () => {
+    expect(zodFor("save_recipe_version").safeParse({ name: "Saus v1", dish: "Saus", asComponentOf: { parentRecipeId: "rec_x" } }).success).toBe(true);
+    // asComponentOf zonder parentRecipeId is ongeldig.
+    expect(zodFor("save_recipe_version").safeParse({ name: "Saus v1", asComponentOf: {} }).success).toBe(false);
+  });
 });
 
 describe("normalizeWeightUnit", () => {
@@ -60,17 +72,24 @@ describe("normalizeWeightUnit", () => {
 });
 
 describe("tool-metadata", () => {
-  it("levert alle 7 prototype-tools met API-schema's", () => {
-    expect(CHEF_TOOLS).toHaveLength(7);
+  it("levert alle tools met API-schema's", () => {
+    expect(CHEF_TOOLS).toHaveLength(8);
     expect(TOOL_SCHEMAS.map((t) => t.name).sort()).toEqual(
-      ["fill_haccp", "navigate_app", "prepare_haccp", "save_recipe_version", "search_ingredients", "switch_supplier", "update_recipe_version"].sort(),
+      ["fill_haccp", "link_component", "navigate_app", "prepare_haccp", "save_recipe_version", "search_ingredients", "switch_supplier", "update_recipe_version"].sort(),
     );
   });
 
   it("markeert overschrijvende acties als bevestiging-vereist", () => {
     expect(TOOL_BY_NAME.get("update_recipe_version")?.confirm).toBe(true);
     expect(TOOL_BY_NAME.get("switch_supplier")?.confirm).toBe(true);
+    expect(TOOL_BY_NAME.get("link_component")?.confirm).toBe(true);
     expect(TOOL_BY_NAME.get("search_ingredients")?.confirm).toBe(false);
     expect(TOOL_BY_NAME.get("save_recipe_version")?.confirm).toBe(false);
+  });
+
+  it("save_recipe_version vraagt alleen bevestiging wanneer het als component koppelt", () => {
+    const save = TOOL_BY_NAME.get("save_recipe_version")!;
+    expect(save.confirmFor?.({ name: "Saus" })).toBe(false);
+    expect(save.confirmFor?.({ name: "Saus", asComponentOf: { parentRecipeId: "rec_x" } })).toBe(true);
   });
 });

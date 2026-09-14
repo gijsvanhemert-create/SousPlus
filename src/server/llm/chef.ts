@@ -116,6 +116,7 @@ function buildSystem(context: unknown): string {
     "Gebruik de beschikbare tools om acties echt uit te voeren wanneer de chef daarom vraagt (recept opslaan of aanpassen, HACCP klaarzetten of invullen, leverancier wisselen, navigeren). Beschrijf kort in je proza wat je doet; de tool voert het uit. Voer geen actie uit als er alleen om advies of analyse wordt gevraagd. " +
     "Wanneer een vraag of opdracht over concrete ingrediënten, prijzen of een nieuwe receptuur gaat, gebruik je EERST search_ingredients om echte artikelen en prijzen uit de Hanos/Sligro-catalogus op te halen, en pas daarna reken of stel je voor — verzin geen prijzen. Sla een recept dat je voorstelt ook echt op met save_recipe_version, met de gevonden prijzen als p (prijs per kg/L) en de hoeveelheid als g (gram per couvert). " +
     "Elk gerecht in de APP-CONTEXT heeft een recipeId, een activeVersion met een id, en een lijst versions met per versie een id + label. Gebruik ALTIJD deze echte id's uit de context — verzin of gok NOOIT een id. Voor update_recipe_version geef je id = het versie-id mee (meestal activeVersion.id, of het bijpassende id uit versions). Voor een nieuwe versie van een BESTAAND recept geef je recipeId mee aan save_recipe_version. " +
+    "Componenten/sub-recepten: als er expliciet om een component of sub-recept (bv. een saus) VOOR een bestaand gerecht wordt gevraagd, maak je het recept met save_recipe_version en geef je asComponentOf.parentRecipeId mee (= recipeId van het ouderrecept) — dan wordt het meteen gekoppeld. Bestaat het te koppelen recept al, gebruik dan link_component met parentRecipeId + childRecipeId in plaats van een nieuw recept te maken. Koppelen vraagt eerst een bevestiging; als het koppelen faalt (bijvoorbeeld door de cyclus- of dieptecheck), meld dat dan eerlijk en doe niet alsof het gelukt is. " +
     "Als een tool een fout teruggeeft, presenteer je het resultaat NOOIT alsof het gelukt is: meld eerlijk en beknopt dat het niet lukte. Cijfers als marge en foodcost baseer je uitsluitend op de APP-CONTEXT (huidige staat); een uitkomst ná een wijziging die niet is opgeslagen noem je expliciet 'verwacht/na aanpassing', nooit als vaststaand feit. " +
     "Bij vragen over smaakcombinaties/pairings: de APP-CONTEXT bevat onder 'flavor' een GECUREERDE affinity-set (flavor.curatedIngredients + flavor.pairings), nu beperkt tot enkele basisingrediënten. Zit het gevraagde ingrediënt in die set, dan mag je een concrete match presenteren als 'affinity-score X uit onze data'. Zit het ingrediënt of de combinatie er NIET in (bv. eendenlever, miso als basis, en de meeste andere), zeg dan NOOIT dat je het niet weet en verzin NOOIT een exacte score: gebruik je eigen brede culinaire kennis als AI om onderbouwd te adviseren — welke smaken, texturen en bereidingen samengaan en waarom — en frame dat expliciet als culinair inzicht ('op basis van culinaire ervaring'), niet als een geverifieerd datapunt. Maak het onderscheid tussen beide bronnen in je antwoord altijd duidelijk. De gecureerde set is een tussenstap; de bredere Foodpairing®-koppeling volgt in fase 2. " +
     "APP-CONTEXT (JSON):\n" +
@@ -214,7 +215,13 @@ export async function runChefTurn(params: {
         ? { ok: true }
         : { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
     },
-    requiresConfirm: (name) => TOOL_BY_NAME.get(name)?.confirm ?? false,
+    requiresConfirm: (name, input) => {
+      const tool = TOOL_BY_NAME.get(name);
+      if (!tool) return false;
+      // Sommige tools bevestigen alleen bij bepaalde input (bv. save_recipe_version
+      // wanneer het ook als component koppelt).
+      return tool.confirmFor ? tool.confirmFor(input) : tool.confirm;
+    },
     execute: async (name, input) => {
       const tool = TOOL_BY_NAME.get(name);
       if (!tool) throw new Error(`onbekende tool ${name}`);

@@ -3,6 +3,7 @@ import { prisma } from "@/server/db";
 import { CostMode } from "@/generated/prisma/enums";
 import { appendRecord } from "@/server/haccp/records";
 import { switchSupplierFor } from "@/server/supplier-switch";
+import { linkComponent, activeVersionIdOf } from "@/server/components";
 import { normalizeWeightUnit } from "@/lib/units";
 import type { ToolSchema } from "./types";
 
@@ -40,6 +41,8 @@ export type ChefTool = {
   input_schema: Record<string, unknown>;
   zod: z.ZodTypeAny;
   confirm: boolean;
+  /** Optioneel: bevestiging alleen vereisen bij bepaalde input (bv. koppelen als component). */
+  confirmFor?: (input: unknown) => boolean;
   cacheable?: boolean;
   execute: (input: unknown, ctx: ToolContext) => Promise<ToolOutcome>;
 };
@@ -163,12 +166,15 @@ const saveZod = z.object({
   prepTime: z.number().int().nonnegative().optional(),
   ingredients: ingredientZod.optional(),
   prep: z.array(z.string()).optional(),
+  // Optioneel: sla dit recept op én koppel het meteen als component/sub-recept
+  // aan een bestaand ouderrecept.
+  asComponentOf: z.object({ parentRecipeId: z.string().min(1) }).optional(),
 });
 
 const saveTool: ChefTool = {
   name: "save_recipe_version",
   description:
-    "Sla een nieuwe receptversie op in het versiebeheer en open deze in de Recipe Lab. g = gram per couvert, p = inkoopprijs per kg/L.",
+    "Sla een nieuwe receptversie op in het versiebeheer. g = gram per couvert, p = inkoopprijs per kg/L. Geef asComponentOf.parentRecipeId mee wanneer expliciet om een component/sub-recept (bv. een saus) VOOR een bestaand gerecht wordt gevraagd; het recept wordt dan na opslaan als component aan dat ouderrecept gekoppeld.",
   input_schema: {
     type: "object",
     properties: {
@@ -182,15 +188,25 @@ const saveTool: ChefTool = {
       prepTime: { type: "number" },
       ingredients: ING_JSON,
       prep: { type: "array", items: { type: "string" } },
+      asComponentOf: {
+        type: "object",
+        description: "Koppel dit recept na opslaan als component aan dit ouderrecept (recipeId uit de APP-CONTEXT).",
+        properties: { parentRecipeId: { type: "string" } },
+        required: ["parentRecipeId"],
+      },
     },
     required: ["name"],
   },
   zod: saveZod,
   confirm: false,
+  // Koppelen als component is een ingrijpende actie ⇒ eerst bevestigen; gewoon
+  // opslaan blijft zonder bevestiging.
+  confirmFor: (input) => !!(input as { asComponentOf?: unknown } | null)?.asComponentOf,
   async execute(input, ctx) {
     const d = saveZod.parse(input);
 
     let recipeId = d.recipeId;
+    const createdNewRecipe = !d.recipeId;
     if (recipeId) {
       const owned = await prisma.recipe.findFirst({
         where: { id: recipeId, locationId: ctx.locationId },
@@ -234,6 +250,29 @@ const saveTool: ChefTool = {
         ...(d.dish ? { dish: d.dish } : {}),
       },
     });
+
+    // Optioneel: direct als component koppelen aan een bestaand ouderrecept
+    // (hergebruikt de gedeelde, gevalideerde linkComponent-kern).
+    if (d.asComponentOf) {
+      try {
+        const parentVersionId = await activeVersionIdOf(ctx.locationId, d.asComponentOf.parentRecipeId);
+        await linkComponent({ locationId: ctx.locationId, parentVersionId, childRecipeId: recipeId });
+      } catch (e) {
+        // Koppeling mislukt (bv. te diep / ouderrecept zonder actieve versie): een
+        // net NIEUW aangemaakt recept rollen we terug zodat er geen los recept
+        // achterblijft. Fout eerlijk doorgeven — nooit doen alsof het lukte.
+        if (createdNewRecipe) {
+          await prisma.recipe.update({ where: { id: recipeId }, data: { activeVersionId: null } }).catch(() => {});
+          await prisma.recipe.delete({ where: { id: recipeId } }).catch(() => {});
+        }
+        throw new Error(`Recept niet gekoppeld als component: ${(e as Error).message}`);
+      }
+      const href = `/lab?recipe=${encodeURIComponent(recipeId)}`;
+      return {
+        text: `Opgeslagen als ${label} · ${d.name} en gekoppeld als component.`,
+        action: { kind: "recipe", label: `Component gekoppeld: ${d.name}`, href },
+      };
+    }
 
     // Open in de Lab exact het zojuist opgeslagen recept (niet het standaardgerecht).
     const href = `/lab?recipe=${encodeURIComponent(recipeId)}`;
@@ -480,6 +519,37 @@ const switchTool: ChefTool = {
   },
 };
 
+// --- link_component (koppelt een BESTAAND recept als component ⇒ bevestiging) --
+
+const linkZod = z.object({ parentRecipeId: z.string().min(1), childRecipeId: z.string().min(1) });
+
+const linkTool: ChefTool = {
+  name: "link_component",
+  description:
+    "Koppel een BESTAAND recept als component/sub-recept aan een ander gerecht. Gebruik dit wanneer het component-recept al bestaat (gebruik save_recipe_version met asComponentOf als het nog gemaakt moet worden). Beide id's zijn recipeId's uit de APP-CONTEXT.",
+  input_schema: {
+    type: "object",
+    properties: {
+      parentRecipeId: { type: "string", description: "recipeId van het gerecht dat de component krijgt." },
+      childRecipeId: { type: "string", description: "recipeId van het recept dat als component gekoppeld wordt." },
+    },
+    required: ["parentRecipeId", "childRecipeId"],
+  },
+  zod: linkZod,
+  confirm: true,
+  async execute(input, ctx) {
+    const { parentRecipeId, childRecipeId } = linkZod.parse(input);
+    const parentVersionId = await activeVersionIdOf(ctx.locationId, parentRecipeId);
+    const res = await linkComponent({ locationId: ctx.locationId, parentVersionId, childRecipeId });
+    const href = `/lab?recipe=${encodeURIComponent(parentRecipeId)}`;
+    // Idempotent: al gekoppeld ⇒ res is undefined.
+    return {
+      text: res ? "Gekoppeld als component." : "Was al als component gekoppeld.",
+      action: { kind: "recipe", label: "Component gekoppeld", href },
+    };
+  },
+};
+
 // --- navigate_app ------------------------------------------------------------
 
 const NAV_TABS = ["chef", "lab", "flavor", "supplier", "ingredients", "ocr", "haccp", "library", "matrix"] as const;
@@ -512,6 +582,7 @@ export const CHEF_TOOLS: ChefTool[] = [
   prepareHaccpTool,
   fillHaccpTool,
   switchTool,
+  linkTool,
   navigateTool,
 ];
 
