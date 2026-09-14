@@ -10,7 +10,8 @@ export type MenuItem = {
   dish: string;
   category: string;
   menuPrice: number;
-  marginPct: number;
+  // null = geen zinvolle marge (bv. menuPrice 0 of geen actieve versie) → "n.v.t.".
+  marginPct: number | null;
   foodcostPerCover: number;
   popularity: number;
   favorite: boolean;
@@ -34,8 +35,9 @@ export async function getMenuOverview(locationId: string): Promise<MenuItem[]> {
     const foodcost = v ? costMap.get(v.id)?.foodcostPerServing ?? null : null;
     const price = Number(r.menuPrice);
     const fc = foodcost ? foodcost.toNumber() : null;
-    // Marge alleen zinvol bij een positieve menuprijs (sub-recepten kunnen 0 zijn).
-    const marginPct = fc !== null && price > 0 ? Number((((price - fc) / price) * 100).toFixed(1)) : 0;
+    // Marge alleen zinvol bij een positieve menuprijs (sub-recepten kunnen 0 zijn);
+    // anders null → "n.v.t." (neutraal, geen valse rode waarschuwing).
+    const marginPct = fc !== null && price > 0 ? Number((((price - fc) / price) * 100).toFixed(1)) : null;
     return {
       id: r.id,
       dish: r.dish,

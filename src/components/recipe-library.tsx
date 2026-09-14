@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Heart, ChefHat, ArrowRight, Trash2, AlertTriangle, Loader2 } from "lucide-react";
 import { eur, pct } from "@/lib/format";
+import { marginChipClass } from "@/lib/margin";
 import { toggleFavorite, deleteRecipe } from "@/server/menu-actions";
 import type { MenuItem } from "@/server/menu";
 
@@ -80,7 +81,6 @@ export function RecipeLibrary({ items: initialItems }: { items: MenuItem[] }) {
 
       <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-[18px]">
         {shown.map((r) => {
-          const crit = r.marginPct < 70;
           const tint = CAT_TINT[r.category] ?? "from-champagne to-canvas text-gold-deep";
           return (
             <button
@@ -142,12 +142,8 @@ export function RecipeLibrary({ items: initialItems }: { items: MenuItem[] }) {
                     <div className="text-[11px] text-muted">Menuprijs</div>
                     <div className="text-[15px] font-semibold">{eur(r.menuPrice)}</div>
                   </div>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-[12.5px] font-bold ${
-                      crit ? "bg-danger-soft text-danger" : "bg-success-soft text-success"
-                    }`}
-                  >
-                    {pct(r.marginPct)} marge
+                  <span className={`rounded-full px-2.5 py-1 text-[12.5px] font-bold ${marginChipClass(r.marginPct)}`}>
+                    {r.marginPct != null ? `${pct(r.marginPct)} marge` : "n.v.t."}
                   </span>
                 </div>
               </div>

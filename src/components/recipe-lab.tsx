@@ -23,6 +23,7 @@ import { Decimal } from "decimal.js";
 import { eur, pct } from "@/lib/format";
 import { ingredientCost, recipeFoodcost } from "@/lib/cost";
 import { computeVersionCosts, unitCostFor, type CostVersionNode } from "@/lib/component-cost";
+import { marginTextClass } from "@/lib/margin";
 import type { LabRecipe, LabVersion, CatalogResult, CandidateRecipe } from "@/types/recipe";
 import {
   updateIngredientAmount,
@@ -166,7 +167,7 @@ export function RecipeLab({
 
   const currentVersionId = version.id; // genarrowd; veilig in closures
   const isActiveVersion = recipe.activeVersionId === currentVersionId;
-  const marginCritical = costing.marginPct != null && costing.marginPct.lt(70);
+  const marginPctNum = costing.marginPct != null ? costing.marginPct.toNumber() : null;
 
   function selectVersion(id: string) {
     setViewVersionByRecipe((m) => ({ ...m, [recipe.id]: id }));
@@ -396,8 +397,8 @@ export function RecipeLab({
         {!kitchenView && (
           <StatChip
             label="Marge"
-            value={costing.marginPct != null ? pct(costing.marginPct.toNumber()) : "n.v.t."}
-            accent={costing.marginPct == null ? "text-muted" : marginCritical ? "text-danger" : "text-success"}
+            value={marginPctNum != null ? pct(marginPctNum) : "n.v.t."}
+            accent={marginTextClass(marginPctNum)}
             testId="lab-margin"
           />
         )}

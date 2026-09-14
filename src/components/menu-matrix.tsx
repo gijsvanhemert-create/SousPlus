@@ -27,8 +27,13 @@ function quadOf(pop: number, margin: number): Quad {
   return hi && hm ? "star" : hi && !hm ? "plow" : !hi && hm ? "puzzle" : "dog";
 }
 
+// Alleen gerechten met een zinvolle marge kunnen op de marge-as geplot worden;
+// recepten zonder marge (n.v.t.) laten we buiten de matrix.
+type PlottableItem = MenuItem & { marginPct: number };
+
 export function MenuMatrix({ items }: { items: MenuItem[] }) {
   const router = useRouter();
+  const plotted: PlottableItem[] = items.filter((d): d is PlottableItem => d.marginPct != null);
 
   const W = 560,
     H = 380,
@@ -50,7 +55,7 @@ export function MenuMatrix({ items }: { items: MenuItem[] }) {
   const mx = sx(POP_MID),
     my = sy(MARGIN_MID);
 
-  const counts = items.reduce<Record<Quad, number>>(
+  const counts = plotted.reduce<Record<Quad, number>>(
     (o, d) => {
       o[quadOf(d.popularity, d.marginPct)] += 1;
       return o;
@@ -59,7 +64,7 @@ export function MenuMatrix({ items }: { items: MenuItem[] }) {
   );
 
   // Advies: lichte het zwaarst-wegende werkpaard uit (populair, marge onder norm).
-  const plows = items
+  const plows = plotted
     .filter((d) => quadOf(d.popularity, d.marginPct) === "plow")
     .sort((a, b) => b.popularity - a.popularity);
   const focus = plows[0] ?? null;
@@ -90,7 +95,7 @@ export function MenuMatrix({ items }: { items: MenuItem[] }) {
             <text x={14} y={(y0 + y1) / 2} fontSize="11" fill={MUTED} textAnchor="middle" transform={`rotate(-90 14 ${(y0 + y1) / 2})`}>
               Marge % ↑
             </text>
-            {items.map((d) => {
+            {plotted.map((d) => {
               const q = quadOf(d.popularity, d.marginPct);
               return (
                 <g key={d.id} className="cursor-pointer" onClick={() => router.push(`/lab?recipe=${d.id}`)}>
