@@ -15,10 +15,10 @@ const CHARCOAL = "#1e2a22";
 
 type Quad = "star" | "plow" | "puzzle" | "dog";
 const QUAD: Record<Quad, { label: string; tip: string }> = {
-  star: { label: "Sterren", tip: "Hoge marge én populair — koester en houd zichtbaar." },
-  plow: { label: "Werkpaarden", tip: "Populair maar magere marge — verlaag foodcost of verhoog prijs." },
-  puzzle: { label: "Puzzels", tip: "Goede marge, weinig verkocht — promoot of herpositioneer." },
-  dog: { label: "Honden", tip: "Lage marge én weinig verkocht — heroverweeg of schrap." },
+  star: { label: "Winner", tip: "Hoge marge én populair — koester en houd zichtbaar." },
+  plow: { label: "Runner", tip: "Populair maar magere marge — verlaag foodcost of verhoog prijs." },
+  puzzle: { label: "Sleeper", tip: "Goede marge, weinig verkocht — promoot of herpositioneer." },
+  dog: { label: "Loser", tip: "Lage marge én weinig verkocht — heroverweeg of schrap." },
 };
 
 function quadOf(pop: number, margin: number): Quad {
@@ -87,10 +87,10 @@ export function MenuMatrix({ items }: { items: MenuItem[] }) {
             <line x1={x0} y1={my} x2={x1} y2={my} stroke={LINE} strokeDasharray="4 4" />
             <line x1={x0} y1={y0} x2={x1} y2={y0} stroke={MUTED} strokeWidth="1" />
             <line x1={x0} y1={y1} x2={x0} y2={y0} stroke={MUTED} strokeWidth="1" />
-            <text x={x0 + 8} y={y1 + 16} fontSize="11" fontWeight="700" fill={COL.puzzle}>PUZZELS</text>
-            <text x={x1 - 8} y={y1 + 16} fontSize="11" fontWeight="700" fill={COL.star} textAnchor="end">STERREN</text>
-            <text x={x0 + 8} y={y0 - 8} fontSize="11" fontWeight="700" fill={COL.dog}>HONDEN</text>
-            <text x={x1 - 8} y={y0 - 8} fontSize="11" fontWeight="700" fill={COL.plow} textAnchor="end">WERKPAARDEN</text>
+            <text x={x0 + 8} y={y1 + 16} fontSize="11" fontWeight="700" fill={COL.puzzle}>SLEEPERS</text>
+            <text x={x1 - 8} y={y1 + 16} fontSize="11" fontWeight="700" fill={COL.star} textAnchor="end">WINNERS</text>
+            <text x={x0 + 8} y={y0 - 8} fontSize="11" fontWeight="700" fill={COL.dog}>LOSERS</text>
+            <text x={x1 - 8} y={y0 - 8} fontSize="11" fontWeight="700" fill={COL.plow} textAnchor="end">RUNNERS</text>
             <text x={(x0 + x1) / 2} y={H - 8} fontSize="11" fill={MUTED} textAnchor="middle">Populariteit · couverts p/m →</text>
             <text x={14} y={(y0 + y1) / 2} fontSize="11" fill={MUTED} textAnchor="middle" transform={`rotate(-90 14 ${(y0 + y1) / 2})`}>
               Marge % ↑
@@ -132,7 +132,7 @@ export function MenuMatrix({ items }: { items: MenuItem[] }) {
         <div className="text-[13.5px] leading-relaxed text-ink">
           {focus ? (
             <>
-              <strong>{focus.dish}</strong> staat op {pct(focus.marginPct)} marge en valt in de werkpaarden — populair,
+              <strong>{focus.dish}</strong> staat op {pct(focus.marginPct)} marge en valt in de Runners — populair,
               maar de marge lekt. Vraag Chef Auguste om een goedkopere variant of bescherm de marge via de Waakhond.
             </>
           ) : (

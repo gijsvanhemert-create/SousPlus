@@ -12,6 +12,7 @@ import {
   Boxes,
   Layers,
   ChevronRight,
+  ChevronDown,
   RefreshCw,
   PackageSearch,
   CheckCircle2,
@@ -340,18 +341,21 @@ export function RecipeLab({
             )}
           </div>
           {selectableRecipes.length > 1 ? (
-            <select
-              value={recipe.id}
-              onChange={(e) => setSelectedRecipeId(e.target.value)}
-              aria-label="Kies gerecht"
-              className="-ml-1 max-w-full cursor-pointer rounded-lg border border-transparent bg-transparent px-1 py-0.5 font-serif text-[32px] font-semibold leading-tight tracking-[-0.02em] text-charcoal hover:border-line"
-            >
-              {selectableRecipes.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.dish}
-                </option>
-              ))}
-            </select>
+            <div className="relative inline-flex max-w-full items-center">
+              <select
+                value={recipe.id}
+                onChange={(e) => setSelectedRecipeId(e.target.value)}
+                aria-label="Kies gerecht"
+                className="-ml-1 max-w-full cursor-pointer appearance-none rounded-lg border border-line bg-card py-1 pl-2.5 pr-10 font-serif text-[32px] font-semibold leading-tight tracking-[-0.02em] text-charcoal transition hover:border-gold focus:border-gold focus:outline-none"
+              >
+                {selectableRecipes.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.dish}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={22} className="pointer-events-none absolute right-3 text-gold" />
+            </div>
           ) : (
             <h1 className="font-serif text-[34px] font-semibold leading-tight tracking-[-0.02em]">
               {recipe.dish}
