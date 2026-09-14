@@ -90,7 +90,15 @@ export function RecipeLab({
   const [kitchenView, setKitchenView] = useState(false);
   const [picker, setPicker] = useState(false);
   const [compPicker, setCompPicker] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Toast automatisch laten verdwijnen.
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   // Kosten per versie voor de hele locatie (incl. sub-componenten, recursief).
   // Herberekent live bij elke bewerking omdat `recipes` de werkkopie is.
@@ -269,7 +277,12 @@ export function RecipeLab({
   }
   function onAddComponent(childRecipeId: string) {
     startTransition(async () => {
-      await addComponent({ parentVersionId: currentVersionId, childRecipeId });
+      const res = await addComponent({ parentVersionId: currentVersionId, childRecipeId });
+      if (res?.autoMarkedComponentOnly) {
+        // Reflecteer de auto-markering direct lokaal en meld het via een toast.
+        setRecipes((rs) => rs.map((r) => (r.id === childRecipeId ? { ...r, componentOnly: true } : r)));
+        setToast(`${res.dish} is nu gemarkeerd als 'alleen component'.`);
+      }
     });
   }
   function onRepointComponent(compId: string) {
@@ -718,6 +731,15 @@ export function RecipeLab({
           onAdd={(id) => onAddComponent(id)}
           onClose={() => setCompPicker(false)}
         />
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-5 left-1/2 z-[70] flex -translate-x-1/2 items-center gap-2 rounded-xl border border-gold bg-forest px-4 py-2.5 text-[13px] font-semibold text-[#E6EAE3] shadow-[0_12px_30px_rgba(21,39,28,.32)] [animation:sp-fade_.2s_ease]"
+        >
+          <Layers size={15} className="text-gold" /> {toast}
+        </div>
       )}
     </div>
   );

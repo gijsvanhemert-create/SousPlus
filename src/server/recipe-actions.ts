@@ -234,8 +234,13 @@ export async function searchRecipesForComponent(
   return candidates;
 }
 
+export type AddComponentResult = { autoMarkedComponentOnly: boolean; dish: string };
+
 /** Voeg een component toe; pint op de actieve versie van het kind-recept. */
-export async function addComponent(input: { parentVersionId: string; childRecipeId: string }) {
+export async function addComponent(input: {
+  parentVersionId: string;
+  childRecipeId: string;
+}): Promise<AddComponentResult | undefined> {
   const { locationId } = await getTenant();
   const { parentVersionId, childRecipeId } = z
     .object({ parentVersionId: z.string().min(1), childRecipeId: z.string().min(1) })
@@ -248,7 +253,12 @@ export async function addComponent(input: { parentVersionId: string; childRecipe
     }),
     prisma.recipe.findFirst({
       where: { id: childRecipeId, locationId },
-      select: { id: true, activeVersion: { select: { id: true, yieldQty: true, yieldUnit: true, yieldMode: true } } },
+      select: {
+        id: true,
+        dish: true,
+        componentOnly: true,
+        activeVersion: { select: { id: true, yieldQty: true, yieldUnit: true, yieldMode: true } },
+      },
     }),
   ]);
   if (!parentVersion) throw new Error("Receptversie niet gevonden in deze locatie.");
@@ -263,17 +273,27 @@ export async function addComponent(input: { parentVersionId: string; childRecipe
   await assertComponentAllowed(locationId, parentVersion.recipeId, childRecipeId);
 
   // Default: één volledige portie van het kind (amount = yieldQty), zelfde eenheid/mode.
-  await prisma.recipeComponent.create({
-    data: {
-      parentVersionId,
-      childRecipeId,
-      childVersionId: child.activeVersion.id,
-      amount: child.activeVersion.yieldQty.toString(),
-      unit: child.activeVersion.yieldUnit,
-      mode: child.activeVersion.yieldMode,
-    },
-  });
+  // Markeer het kind meteen als "alleen component" als het dat nog niet is, zodat een
+  // saus die als los recept is opgeslagen niet tussen de menu-gerechten blijft staan.
+  // Blijft een default: de chef kan het via de Lab-toggle bewust terugzetten.
+  const autoMark = !child.componentOnly;
+  await prisma.$transaction([
+    prisma.recipeComponent.create({
+      data: {
+        parentVersionId,
+        childRecipeId,
+        childVersionId: child.activeVersion.id,
+        amount: child.activeVersion.yieldQty.toString(),
+        unit: child.activeVersion.yieldUnit,
+        mode: child.activeVersion.yieldMode,
+      },
+    }),
+    ...(autoMark
+      ? [prisma.recipe.update({ where: { id: childRecipeId }, data: { componentOnly: true } })]
+      : []),
+  ]);
   revalidateRecipeSurfaces();
+  return { autoMarkedComponentOnly: autoMark, dish: child.dish };
 }
 
 /** Pas de gebruikte hoeveelheid van een component aan (per couvert van de parent). */
