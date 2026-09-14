@@ -10,21 +10,31 @@ import {
   Plus,
   X,
   Boxes,
+  Layers,
+  ChevronRight,
+  RefreshCw,
   PackageSearch,
   CheckCircle2,
   Loader2,
   ChefHat,
   BadgeCheck,
 } from "lucide-react";
+import { Decimal } from "decimal.js";
 import { eur, pct } from "@/lib/format";
-import { ingredientCost, recipeCost, isMarginCritical } from "@/lib/cost";
-import type { LabRecipe, LabVersion, CatalogResult } from "@/types/recipe";
+import { ingredientCost, recipeFoodcost } from "@/lib/cost";
+import { computeVersionCosts, unitCostFor, type CostVersionNode } from "@/lib/component-cost";
+import type { LabRecipe, LabVersion, CatalogResult, CandidateRecipe } from "@/types/recipe";
 import {
   updateIngredientAmount,
   removeIngredient,
   addIngredientFromCatalog,
   setActiveVersion,
   searchCatalog,
+  addComponent,
+  updateComponentAmount,
+  removeComponent,
+  repointComponentToActive,
+  searchRecipesForComponent,
 } from "@/server/recipe-actions";
 
 const SUP_COLOR: Record<string, string> = {
@@ -78,7 +88,27 @@ export function RecipeLab({
   const [covers, setCovers] = useState(12);
   const [kitchenView, setKitchenView] = useState(false);
   const [picker, setPicker] = useState(false);
+  const [compPicker, setCompPicker] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Kosten per versie voor de hele locatie (incl. sub-componenten, recursief).
+  // Herberekent live bij elke bewerking omdat `recipes` de werkkopie is.
+  const versionCosts = useMemo(() => {
+    const nodes: CostVersionNode[] = recipes.flatMap((r) =>
+      r.versions.map((v) => ({
+        id: v.id,
+        yieldQty: sanitize(v.yieldQty),
+        ingredients: v.ingredients.map((i) => ({
+          catalogItemId: i.catalogItemId,
+          amount: sanitize(i.amount),
+          mode: i.mode,
+          pricePerUnit: i.pricePerUnit,
+        })),
+        components: v.components.map((c) => ({ childVersionId: c.childVersionId, amount: sanitize(c.amount) })),
+      })),
+    );
+    return computeVersionCosts(nodes);
+  }, [recipes]);
 
   const recipe = recipes.find((r) => r.id === selectedRecipeId) ?? recipes[0];
   const versions = recipe?.versions ?? [];
@@ -94,19 +124,25 @@ export function RecipeLab({
   // --- Live kostprijs/marge (fase-2 motor) — hook altijd onvoorwaardelijk aanroepen.
   const costing = useMemo(() => {
     if (!recipe || !version) return null;
-    return recipeCost(
-      {
-        menuPrice: recipe.menuPrice,
-        ingredients: version.ingredients.map((i) => ({
-          catalogItemId: i.catalogItemId,
-          amount: sanitize(i.amount),
-          mode: i.mode,
-          pricePerUnit: i.pricePerUnit,
-        })),
-      },
-      { covers },
-    );
-  }, [recipe, version, covers]);
+    const foodcostPerCover = recipeFoodcost({
+      ingredients: version.ingredients.map((i) => ({
+        catalogItemId: i.catalogItemId,
+        amount: sanitize(i.amount),
+        mode: i.mode,
+        pricePerUnit: i.pricePerUnit,
+      })),
+      // Componenten tellen mee via hun (recursief bepaalde) kost per eenheid.
+      components: version.components.map((c) => ({
+        amount: sanitize(c.amount),
+        unitCost: unitCostFor(versionCosts, c.childVersionId),
+      })),
+    });
+    // Marge is alleen gedefinieerd bij een positieve menuprijs; sub-recepten
+    // kunnen €0 zijn (dan tonen we n.v.t. i.p.v. te crashen op recipeCost).
+    const price = new Decimal(sanitize(recipe.menuPrice));
+    const marginPct = price.gt(0) ? price.sub(foodcostPerCover).div(price).mul(100) : null;
+    return { foodcostPerCover, foodcostTotal: foodcostPerCover.mul(covers), marginPct };
+  }, [recipe, version, covers, versionCosts]);
 
   if (!recipe || !version || !costing) {
     return (
@@ -121,7 +157,7 @@ export function RecipeLab({
 
   const currentVersionId = version.id; // genarrowd; veilig in closures
   const isActiveVersion = recipe.activeVersionId === currentVersionId;
-  const marginCritical = isMarginCritical(costing);
+  const marginCritical = costing.marginPct != null && costing.marginPct.lt(70);
 
   function selectVersion(id: string) {
     setViewVersionByRecipe((m) => ({ ...m, [recipe.id]: id }));
@@ -189,6 +225,61 @@ export function RecipeLab({
     startTransition(async () => {
       await setActiveVersion({ recipeId: recipe.id, versionId: currentVersionId });
     });
+  }
+
+  // --- Componenten -----------------------------------------------------------
+  function updateLocalComponent(compId: string, patch: { amount: string }) {
+    setRecipes((rs) =>
+      rs.map((r) =>
+        r.id !== recipe.id
+          ? r
+          : {
+              ...r,
+              versions: r.versions.map((v) =>
+                v.id !== currentVersionId
+                  ? v
+                  : { ...v, components: v.components.map((c) => (c.id === compId ? { ...c, ...patch } : c)) },
+              ),
+            },
+      ),
+    );
+  }
+  function persistComponentAmount(compId: string, value: string) {
+    startTransition(async () => {
+      await updateComponentAmount({ componentId: compId, amount: sanitize(value) });
+    });
+  }
+  function onRemoveComponent(compId: string) {
+    setRecipes((rs) =>
+      rs.map((r) =>
+        r.id !== recipe.id
+          ? r
+          : {
+              ...r,
+              versions: r.versions.map((v) =>
+                v.id !== currentVersionId ? v : { ...v, components: v.components.filter((c) => c.id !== compId) },
+              ),
+            },
+      ),
+    );
+    startTransition(async () => {
+      await removeComponent({ componentId: compId });
+    });
+  }
+  function onAddComponent(childRecipeId: string) {
+    startTransition(async () => {
+      await addComponent({ parentVersionId: currentVersionId, childRecipeId });
+    });
+  }
+  function onRepointComponent(compId: string) {
+    startTransition(async () => {
+      await repointComponentToActive({ componentId: compId });
+    });
+  }
+  // Open de component in zijn eigen weergave, op de gepinde versie.
+  function openComponent(childRecipeId: string, childVersionId: string) {
+    setViewVersionByRecipe((m) => ({ ...m, [childRecipeId]: childVersionId }));
+    setSelectedRecipeId(childRecipeId);
   }
 
   return (
@@ -259,8 +350,8 @@ export function RecipeLab({
         {!kitchenView && (
           <StatChip
             label="Marge"
-            value={pct(costing.marginPct.toNumber())}
-            accent={marginCritical ? "text-danger" : "text-success"}
+            value={costing.marginPct != null ? pct(costing.marginPct.toNumber()) : "n.v.t."}
+            accent={costing.marginPct == null ? "text-muted" : marginCritical ? "text-danger" : "text-success"}
             testId="lab-margin"
           />
         )}
@@ -472,6 +563,108 @@ export function RecipeLab({
               </div>
             )}
           </div>
+
+          {/* Componenten / sub-recepten */}
+          {(version.components.length > 0 || !kitchenView) && (
+            <div className="mt-[22px] rounded-[18px] border border-line bg-card p-[22px]">
+              <div className="mb-3.5 flex items-baseline justify-between">
+                <span className="flex items-center gap-2 font-serif text-base font-semibold">
+                  <Layers size={16} className="text-gold" /> Componenten
+                </span>
+                <span className="text-[11.5px] text-muted">sub-recepten</span>
+              </div>
+
+              {version.components.map((c) => {
+                const isPiece = c.mode === "PIECE";
+                const lineCost = unitCostFor(versionCosts, c.childVersionId)
+                  .mul(sanitize(c.amount))
+                  .mul(covers)
+                  .toNumber();
+                const totalDisp = fmtTotal(c.amount, covers, c.unit, isPiece);
+                const stale = !!c.childActiveVersionId && c.childActiveVersionId !== c.childVersionId;
+                return (
+                  <div key={c.id} className="border-b border-canvas py-[9px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => openComponent(c.childRecipeId, c.childVersionId)}
+                        className="group/comp flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                        aria-label={`Open ${c.name}`}
+                      >
+                        <span className="truncate text-[13.5px] font-medium text-ink transition group-hover/comp:text-gold-deep">
+                          {c.name}
+                        </span>
+                        <span className="shrink-0 rounded-full bg-champagne-soft px-1.5 py-0.5 text-[10px] font-semibold text-gold-deep">
+                          {c.versionLabel}
+                        </span>
+                        <ChevronRight size={13} className="shrink-0 text-muted transition group-hover/comp:text-gold-deep" />
+                      </button>
+                      <div className="flex shrink-0 items-center gap-2.5">
+                        {!kitchenView && (
+                          <span className="flex items-center gap-1">
+                            <input
+                              value={c.amount}
+                              onChange={(e) => updateLocalComponent(c.id, { amount: e.target.value })}
+                              onBlur={(e) => persistComponentAmount(c.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                              }}
+                              inputMode="decimal"
+                              aria-label={`hoeveelheid ${c.name}`}
+                              className="w-[50px] rounded-lg border border-line bg-canvas px-[7px] py-[5px] text-center text-[13px] text-charcoal tabular-nums"
+                            />
+                            <span className="w-6 text-[11.5px] text-muted">{c.unit}</span>
+                          </span>
+                        )}
+                        {kitchenView && <span className="text-[13.5px] font-semibold tabular-nums">{totalDisp}</span>}
+                        {!kitchenView && (
+                          <span className="w-16 text-right text-[11px] text-muted tabular-nums">{totalDisp}</span>
+                        )}
+                        {!kitchenView && (
+                          <span className="w-[52px] text-right text-[12.5px] text-muted tabular-nums">{eur(lineCost)}</span>
+                        )}
+                        {!kitchenView && (
+                          <button
+                            onClick={() => onRemoveComponent(c.id)}
+                            aria-label={`Verwijder ${c.name}`}
+                            className="grid size-6 cursor-pointer place-items-center rounded-[7px] text-muted transition hover:bg-danger-soft hover:text-danger"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {stale && !kitchenView && (
+                      <div className="mt-1.5 flex items-center gap-2 text-[11px]">
+                        <span className="text-muted">Nieuwere versie beschikbaar.</span>
+                        <button
+                          onClick={() => onRepointComponent(c.id)}
+                          disabled={isPending}
+                          className="inline-flex items-center gap-1 rounded-full border border-gold px-2 py-0.5 font-semibold text-gold-deep transition hover:bg-champagne-soft disabled:opacity-60"
+                        >
+                          <RefreshCw size={11} /> bijwerken
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {version.components.length === 0 && (
+                <div className="py-4 text-center text-[13px] text-muted">
+                  Nog geen componenten — voeg een bestaand recept toe als sub-recept.
+                </div>
+              )}
+
+              {!kitchenView && (
+                <button
+                  onClick={() => setCompPicker(true)}
+                  className="mt-3.5 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[11px] border border-dashed border-gold bg-champagne-soft px-3.5 py-2.5 text-[13px] font-semibold text-gold-deep transition hover:bg-champagne"
+                >
+                  <Plus size={16} /> Component uit recepten
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -481,6 +674,16 @@ export function RecipeLab({
           pending={isPending}
           onAdd={onAddFromCatalog}
           onClose={() => setPicker(false)}
+        />
+      )}
+
+      {compPicker && (
+        <RecipePicker
+          parentRecipeId={recipe.id}
+          presentIds={new Set(version.components.map((c) => c.childRecipeId))}
+          pending={isPending}
+          onAdd={(id) => onAddComponent(id)}
+          onClose={() => setCompPicker(false)}
         />
       )}
     </div>
@@ -622,6 +825,122 @@ function CatalogPicker({
           <span className="text-xs text-muted">
             Toegevoegde ingrediënten rekenen direct mee in de marge.
           </span>
+          <button
+            onClick={onClose}
+            className="cursor-pointer rounded-[10px] bg-forest px-4.5 py-2 text-[13px] font-semibold text-white"
+          >
+            Klaar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecipePicker({
+  parentRecipeId,
+  presentIds,
+  pending,
+  onAdd,
+  onClose,
+}: {
+  parentRecipeId: string;
+  presentIds: Set<string>;
+  pending: boolean;
+  onAdd: (childRecipeId: string) => void;
+  onClose: () => void;
+}) {
+  const [pq, setPq] = useState("");
+  const [results, setResults] = useState<CandidateRecipe[]>([]);
+  const [searching, setSearching] = useState(true);
+
+  const [prevPq, setPrevPq] = useState<string | null>(null);
+  if (pq !== prevPq) {
+    setPrevPq(pq);
+    setSearching(true);
+  }
+
+  useEffect(() => {
+    let active = true;
+    const t = setTimeout(async () => {
+      const r = await searchRecipesForComponent(pq, parentRecipeId);
+      if (active) {
+        setResults(r);
+        setSearching(false);
+      }
+    }, 180);
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
+  }, [pq, parentRecipeId]);
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[60] grid place-items-center bg-[rgba(14,26,18,0.45)] p-4 backdrop-blur-[2px] [animation:sp-fade_.2s_ease]"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[82vh] w-[540px] max-w-full flex-col overflow-hidden rounded-[18px] border border-line bg-card shadow-[0_24px_60px_rgba(21,39,28,.28)]"
+      >
+        <div className="flex items-center justify-between border-b border-line px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <Layers size={17} className="text-gold" />
+            <span className="font-serif text-base font-semibold">Component uit recepten</span>
+          </div>
+          <button onClick={onClose} aria-label="Sluiten" className="cursor-pointer text-muted">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="border-b border-line p-4">
+          <div className="relative">
+            <PackageSearch size={17} className="absolute left-3.5 top-3 text-muted" />
+            <input
+              autoFocus
+              value={pq}
+              onChange={(e) => setPq(e.target.value)}
+              placeholder="Zoek een bestaand recept…"
+              className="w-full rounded-xl border border-line bg-canvas py-2.5 pl-10 pr-3.5 text-[14.5px] text-charcoal"
+            />
+          </div>
+        </div>
+        <div className="overflow-y-auto py-1.5">
+          {searching && (
+            <div className="flex items-center justify-center gap-2 py-8 text-[13px] text-muted">
+              <Loader2 size={15} className="animate-spin" /> Recepten doorzoeken…
+            </div>
+          )}
+          {!searching &&
+            results.map((it) => {
+              const added = presentIds.has(it.id);
+              return (
+                <button
+                  key={it.id}
+                  onClick={() => !added && onAdd(it.id)}
+                  disabled={added || pending}
+                  className="flex w-full items-center justify-between gap-2.5 border-b border-canvas px-5 py-2.5 text-left transition enabled:hover:bg-canvas disabled:cursor-default"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-charcoal">{it.dish}</span>
+                    <span className="text-[11.5px] text-muted">
+                      {it.category} · actieve versie {it.versionLabel}
+                    </span>
+                  </span>
+                  {added ? (
+                    <CheckCircle2 size={18} className="shrink-0 text-success" />
+                  ) : (
+                    <Plus size={18} className="shrink-0 text-gold" />
+                  )}
+                </button>
+              );
+            })}
+          {!searching && results.length === 0 && (
+            <div className="px-5 py-8 text-center text-sm text-muted">Geen geschikte recepten gevonden.</div>
+          )}
+        </div>
+        <div className="flex items-center justify-between border-t border-line px-5 py-3">
+          <span className="text-xs text-muted">Componenten rekenen direct mee in de marge.</span>
           <button
             onClick={onClose}
             className="cursor-pointer rounded-[10px] bg-forest px-4.5 py-2 text-[13px] font-semibold text-white"

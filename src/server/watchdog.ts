@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db";
-import { recipeCost, type CostMode } from "@/lib/cost";
+import { recipeCost, recipeFoodcost, type CostMode } from "@/lib/cost";
 import { switchSupplierFor } from "@/server/supplier-switch";
 
 // Marge-Waakhond. Detecteert margebedreigingen na een prijscascade (re-sync /
@@ -30,8 +30,10 @@ async function recipeMargins(locationId: string): Promise<RecipeMargin[]> {
   });
   return recipes.map((r) => {
     const v = r.activeVersion;
+    // Alleen echte menu-gerechten met een positieve prijs hebben een zinvolle marge;
+    // sub-recepten (menuPrice 0) slaan we over (recipeCost werpt anders).
     const cost =
-      v && v.ingredients.length > 0
+      v && v.ingredients.length > 0 && Number(r.menuPrice) > 0
         ? recipeCost({
             menuPrice: r.menuPrice.toString(),
             ingredients: v.ingredients.map((i) => ({
@@ -131,15 +133,14 @@ export async function resolveAlert(
       include: { activeVersion: { include: { ingredients: true } } },
     });
     if (recipe?.activeVersion) {
-      const cost = recipeCost({
-        menuPrice: recipe.menuPrice.toString(),
+      // Alleen de foodcost nodig (geen marge) → recipeFoodcost werpt niet bij prijs 0.
+      const foodcost = recipeFoodcost({
         ingredients: recipe.activeVersion.ingredients.map((i) => ({
           amount: i.amount.toString(),
           mode: i.mode as CostMode,
           pricePerUnit: i.pricePerUnit.toString(),
         })),
-      });
-      const foodcost = cost.foodcostPerCover.toNumber();
+      }).toNumber();
       const newPrice = Math.ceil((foodcost / (1 - RESTORE_TARGET / 100)) * 100) / 100;
       await prisma.recipe.update({ where: { id: recipe.id }, data: { menuPrice: newPrice.toFixed(2) } });
       await prisma.marginAlert.update({

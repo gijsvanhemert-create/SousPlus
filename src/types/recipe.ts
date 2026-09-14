@@ -63,3 +63,12 @@ export type CatalogResult = {
   unit: string;
   price: string; // Decimal als string
 };
+
+// Kandidaat-recept voor de component-picker (bestaande recepten i.p.v. catalogus).
+export type CandidateRecipe = {
+  id: string;
+  dish: string;
+  category: string;
+  activeVersionId: string;
+  versionLabel: string;
+};

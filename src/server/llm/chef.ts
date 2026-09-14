@@ -1,5 +1,5 @@
 import { prisma } from "@/server/db";
-import { recipeCost } from "@/lib/cost";
+import { recipeFoodcost } from "@/lib/cost";
 import type { CostMode } from "@/lib/cost";
 import { FLAVOR_DB } from "@/lib/flavor-data";
 import { getRouter } from "./router";
@@ -36,9 +36,10 @@ export type CtxRecipe = {
 export function buildMenuContext(recipes: CtxRecipe[]) {
   return recipes.map((r) => {
     const v = r.activeVersion;
-    const cost = v
-      ? recipeCost({
-          menuPrice: r.menuPrice.toString(),
+    // recipeFoodcost werpt niet bij menuPrice 0 (sub-recepten); marge alleen
+    // zinvol bij een positieve prijs.
+    const foodcost = v
+      ? recipeFoodcost({
           ingredients: v.ingredients.map((i) => ({
             amount: i.amount.toString(),
             mode: i.mode as CostMode,
@@ -46,14 +47,16 @@ export function buildMenuContext(recipes: CtxRecipe[]) {
           })),
         })
       : null;
+    const price = Number(r.menuPrice);
+    const fc = foodcost ? foodcost.toNumber() : null;
     return {
       recipeId: r.id,
       dish: r.dish,
       category: r.category,
-      menuPrice: Number(r.menuPrice),
+      menuPrice: price,
       popularity: r.popularity,
-      marginPct: cost ? Number(cost.marginPct.toFixed(1)) : null,
-      foodcostPerCover: cost ? Number(cost.foodcostPerCover.toFixed(2)) : null,
+      marginPct: fc !== null && price > 0 ? Number((((price - fc) / price) * 100).toFixed(1)) : null,
+      foodcostPerCover: fc !== null ? Number(fc.toFixed(2)) : null,
       activeVersion: v ? { id: v.id, label: v.label, name: v.name } : null,
       // Alle versies met id + label, zodat update_recipe_version het juiste
       // versie-id kan meekrijgen (id = versie-id).

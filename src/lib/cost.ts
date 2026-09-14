@@ -122,6 +122,19 @@ export function foodcost(ingredients: CostIngredient[], overrides?: PriceOverrid
 }
 
 /**
+ * Foodcost per couvert incl. componenten — zonder menuprijs, dus veilig voor
+ * (sub-)recepten met menuPrice 0 (waar marge niet gedefinieerd is).
+ */
+export function recipeFoodcost(
+  input: { ingredients: CostIngredient[]; components?: ComponentCost[] },
+  overrides?: PriceOverrides,
+): Decimal {
+  const ingredientsPerCover = foodcost(input.ingredients, overrides);
+  const componentsPerCover = (input.components ?? []).reduce((sum, c) => sum.add(componentCost(c)), ZERO);
+  return ingredientsPerCover.add(componentsPerCover);
+}
+
+/**
  * Volledige kost-/margeberekening voor een receptversie.
  * Dezelfde motor draait de Marge-Waakhond, met `options.overrides` voor
  * gewijzigde leveranciersprijzen.
@@ -139,12 +152,7 @@ export function recipeCost(input: RecipeCostInput, options: RecipeCostOptions = 
     throw new Error("menuPrice moet groter dan 0 zijn voor margeberekening");
   }
 
-  const ingredientsPerCover = foodcost(input.ingredients, options.overrides);
-  const componentsPerCover = (input.components ?? []).reduce(
-    (sum, c) => sum.add(componentCost(c)),
-    ZERO,
-  );
-  const foodcostPerCover = ingredientsPerCover.add(componentsPerCover);
+  const foodcostPerCover = recipeFoodcost(input, options.overrides);
   const grossProfitPerCover = menuPrice.sub(foodcostPerCover);
   const marginRatio = grossProfitPerCover.div(menuPrice);
 
