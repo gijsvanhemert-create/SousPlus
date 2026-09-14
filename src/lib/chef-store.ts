@@ -16,15 +16,6 @@ export type ChefMessage = {
 
 type Pending = { tool: string; summary: string; originalMessage: string } | null;
 
-type TurnResult = {
-  conversationId: string;
-  text: string;
-  actions?: ChefActionView[];
-  navigateTo?: string;
-  pendingConfirmation?: { tool: string; summary: string };
-  error?: string;
-};
-
 type ChefState = {
   conversationId: string | null;
   messages: ChefMessage[];
@@ -69,11 +60,26 @@ export const useChefStore = create<ChefState>((set, get) => ({
     const trimmed = text.trim();
     if (!trimmed || get().busy) return;
     const echo = opts?.echo ?? true;
+    // Voeg de gebruikersecho toe (indien nodig) plus een lege chef-bubbel die we
+    // tijdens het streamen vullen.
     set((s) => ({
       busy: true,
       pending: null,
-      messages: echo ? [...s.messages, { role: "you", text: trimmed }] : s.messages,
+      messages: [...s.messages, ...(echo ? [{ role: "you" as const, text: trimmed }] : []), { role: "chef" as const, text: "" }],
     }));
+
+    // Werk de laatste (streamende) chef-bubbel bij.
+    const setLastChef = (fn: (m: ChefMessage) => ChefMessage) =>
+      set((s) => {
+        const msgs = s.messages.slice();
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          if (msgs[i].role === "chef") {
+            msgs[i] = fn(msgs[i]);
+            break;
+          }
+        }
+        return { messages: msgs };
+      });
 
     try {
       const res = await fetch("/api/chef", {
@@ -81,30 +87,65 @@ export const useChefStore = create<ChefState>((set, get) => ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: trimmed, conversationId: get().conversationId, autoConfirm: opts?.autoConfirm }),
       });
-      const data = (await res.json()) as TurnResult;
-      if (!res.ok) {
-        set((s) => ({ busy: false, messages: [...s.messages, { role: "chef", text: data.error ?? "Er ging iets mis, chef." }] }));
+      if (!res.ok || !res.body) {
+        let msg = "Er ging iets mis, chef.";
+        try {
+          msg = ((await res.json()) as { error?: string }).error ?? msg;
+        } catch {}
+        setLastChef((m) => ({ ...m, text: msg }));
+        set({ busy: false });
         return;
       }
 
-      if (data.pendingConfirmation) {
-        set((s) => ({
-          busy: false,
-          conversationId: data.conversationId,
-          pending: { tool: data.pendingConfirmation!.tool, summary: data.pendingConfirmation!.summary, originalMessage: trimmed },
-          messages: [...s.messages, { role: "chef", text: data.text || data.pendingConfirmation!.summary }],
-        }));
-        return;
-      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let navigateTo: string | undefined;
 
-      set((s) => ({
-        busy: false,
-        conversationId: data.conversationId,
-        messages: [...s.messages, { role: "chef", text: data.text, actions: data.actions }],
-      }));
-      return data.navigateTo;
+      const handle = (evt: {
+        type: string;
+        text?: string;
+        conversationId?: string;
+        actions?: ChefActionView[];
+        navigateTo?: string;
+        pendingConfirmation?: { tool: string; summary: string };
+        error?: string;
+      }) => {
+        if (evt.type === "delta") {
+          setLastChef((m) => ({ ...m, text: m.text + (evt.text ?? "") }));
+        } else if (evt.type === "done") {
+          if (evt.error) {
+            setLastChef((m) => ({ ...m, text: evt.error! }));
+          } else if (evt.pendingConfirmation) {
+            setLastChef((m) => ({ ...m, text: m.text || evt.pendingConfirmation!.summary }));
+            set({
+              conversationId: evt.conversationId ?? get().conversationId,
+              pending: { tool: evt.pendingConfirmation.tool, summary: evt.pendingConfirmation.summary, originalMessage: trimmed },
+            });
+          } else {
+            setLastChef((m) => ({ ...m, text: evt.text ?? m.text, actions: evt.actions }));
+            if (evt.conversationId) set({ conversationId: evt.conversationId });
+            navigateTo = evt.navigateTo;
+          }
+        }
+      };
+
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (line) handle(JSON.parse(line));
+        }
+      }
+      set({ busy: false });
+      return navigateTo;
     } catch {
-      set((s) => ({ busy: false, messages: [...s.messages, { role: "chef", text: "De lijn met de keuken hapert even — geef me zo opnieuw de opdracht." }] }));
+      setLastChef((m) => ({ ...m, text: m.text || "De lijn met de keuken hapert even — geef me zo opnieuw de opdracht." }));
+      set({ busy: false });
     }
   },
 

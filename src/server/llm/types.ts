@@ -45,4 +45,11 @@ export interface LlmAdapter {
   /** Naam van de adapter (voor logging): "mock" | "anthropic". */
   readonly name: string;
   createMessage(req: LlmRequest): Promise<LlmResponse>;
+  /**
+   * Optioneel streamen: roept `onText` aan met tekst-deltas terwijl het model
+   * genereert, en levert daarna dezelfde volledige LlmResponse als createMessage
+   * (inclusief tool_use-blocks). Adapters zonder streaming laten dit weg; de
+   * router valt dan terug op createMessage.
+   */
+  streamMessage?(req: LlmRequest, onText: (delta: string) => void): Promise<LlmResponse>;
 }

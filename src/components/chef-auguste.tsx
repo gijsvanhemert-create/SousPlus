@@ -40,6 +40,11 @@ export function ChefAuguste() {
   }
 
   const showSuggestions = loaded && messages.length <= 1;
+  // "Werkt…"-indicator alleen tonen zolang er nog geen tekst streamt in de laatste
+  // chef-bubbel; zodra de tekst binnendruppelt is de indicator overbodig.
+  const last = messages[messages.length - 1];
+  const streamingStarted = last?.role === "chef" && last.text.length > 0;
+  const showWorking = busy && !streamingStarted;
 
   return (
     <div className="flex min-h-[calc(100vh-220px)] flex-col">
@@ -102,7 +107,7 @@ export function ChefAuguste() {
           ),
         )}
 
-        {busy && (
+        {showWorking && (
           <div className="flex items-center gap-2 pl-12 text-[13px] text-muted">
             <Loader2 size={14} className="animate-spin" /> Chef Auguste werkt…
           </div>

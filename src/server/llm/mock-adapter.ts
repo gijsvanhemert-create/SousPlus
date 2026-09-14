@@ -108,6 +108,21 @@ export class MockAdapter implements LlmAdapter {
     this.script = script;
   }
 
+  // Streaming voor de mock: bereken het antwoord en geef de tekst in korte
+  // brokjes door, zodat de streaming-UX ook zonder API-sleutel werkt/testbaar is.
+  async streamMessage(req: LlmRequest, onText: (delta: string) => void): Promise<LlmResponse> {
+    const res = await this.createMessage(req);
+    const text = res.content
+      .filter((b): b is { type: "text"; text: string } => b.type === "text")
+      .map((b) => b.text)
+      .join("\n");
+    for (const chunk of text.match(/\S+\s*/g) ?? []) {
+      onText(chunk);
+      await new Promise((r) => setTimeout(r, 8));
+    }
+    return res;
+  }
+
   async createMessage(req: LlmRequest): Promise<LlmResponse> {
     // Tier 1: OCR-extractie. De mock parseert de geplakte factuurtekst regelmatig
     // (regex) en geeft dezelfde JSON-array terug die het echte model zou geven.

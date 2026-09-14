@@ -175,23 +175,37 @@ export async function runChefTurn(params: {
   message: string;
   conversationId?: string;
   autoConfirm?: boolean;
+  /** Optioneel: ontvang tekst-deltas terwijl het model genereert (streaming). */
+  onText?: (delta: string) => void;
 }): Promise<ChefTurnResult> {
   const ctx: ToolContext = { locationId: params.locationId, userId: params.userId };
+  // Diagnose-timing (alleen actief met CHEF_TIMING=1) om te zien waar de tijd
+  // heen gaat: DB/context-opbouw vs. de LLM-round-trips in de tool-loop.
+  const timing = process.env.CHEF_TIMING === "1";
+  const t0 = performance.now();
+
   const conversationId = await resolveConversation(params.locationId, params.userId, params.conversationId);
   const history = await loadHistory(conversationId);
   const messages: LlmMessage[] = [...history, { role: "user", content: params.message }];
+  const tHistory = performance.now();
 
   const system = buildSystem(await buildContext(params.locationId));
+  const tContext = performance.now();
   const router = getRouter();
 
+  let rounds = 0;
   const result = await runToolLoop(messages, {
     autoConfirm: params.autoConfirm ?? false,
-    call: ({ messages: m, toolChoiceNone }) =>
-      router.run(
-        "tier2",
-        { system, messages: m, tools: TOOL_SCHEMAS, toolChoiceNone, maxTokens: llmConfig.maxTokens },
-        { locationId: params.locationId },
-      ),
+    call: ({ messages: m, toolChoiceNone }) => {
+      rounds += 1;
+      const req = { system, messages: m, tools: TOOL_SCHEMAS, toolChoiceNone, maxTokens: llmConfig.maxTokens };
+      if (params.onText) {
+        // Scheid opeenvolgende rondes (bv. "ik zoek…" gevolgd door het antwoord).
+        if (rounds > 1) params.onText("\n\n");
+        return router.runStream("tier2", req, { locationId: params.locationId }, params.onText);
+      }
+      return router.run("tier2", req, { locationId: params.locationId });
+    },
     validate: (name, input): Validation => {
       const tool = TOOL_BY_NAME.get(name);
       if (!tool) return { ok: false, error: `onbekende tool ${name}` };
@@ -207,6 +221,21 @@ export async function runChefTurn(params: {
       return tool.execute(input, ctx);
     },
   });
+
+  if (timing) {
+    const now = performance.now();
+    console.log(
+      JSON.stringify({
+        at: "chef.timing",
+        historyMs: Math.round(tHistory - t0),
+        buildContextMs: Math.round(tContext - tHistory),
+        loopMs: Math.round(now - tContext),
+        totalMs: Math.round(now - t0),
+        rounds,
+        message: params.message.slice(0, 48),
+      }),
+    );
+  }
 
   // Op bevestiging wachten: niets persisteren — de client herhaalt de opdracht
   // met autoConfirm zodra de chef akkoord geeft.

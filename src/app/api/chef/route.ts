@@ -28,22 +28,47 @@ export async function POST(request: Request) {
     return Response.json({ error: "Ongeldige invoer." }, { status: 400 });
   }
 
-  try {
-    const result = await runChefTurn({
-      locationId: tenant.locationId,
-      userId: tenant.userId,
-      message: body.message,
-      conversationId: body.conversationId ?? undefined,
-      autoConfirm: body.autoConfirm ?? undefined,
-    });
-    return Response.json(result);
-  } catch (e) {
-    if (e instanceof RateLimitError) {
-      return Response.json({ error: e.message }, { status: 429 });
-    }
-    console.error("chef turn error", e);
-    return Response.json({ error: "De lijn met de keuken hapert even — geef me zo opnieuw de opdracht." }, { status: 500 });
-  }
+  // Streaming respons (NDJSON, één JSON-object per regel):
+  //   {"type":"delta","text":"…"}   — herhaald, tijdens het genereren
+  //   {"type":"done", …}            — afsluitend, met actions/navigateTo/pending/error
+  const t = tenant;
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (obj: unknown) => controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+      try {
+        const result = await runChefTurn({
+          locationId: t.locationId,
+          userId: t.userId,
+          message: body.message,
+          conversationId: body.conversationId ?? undefined,
+          autoConfirm: body.autoConfirm ?? undefined,
+          onText: (delta) => send({ type: "delta", text: delta }),
+        });
+        send({
+          type: "done",
+          conversationId: result.conversationId,
+          text: result.text,
+          actions: result.actions,
+          navigateTo: result.navigateTo,
+          pendingConfirmation: result.pendingConfirmation,
+        });
+      } catch (e) {
+        if (e instanceof RateLimitError) {
+          send({ type: "done", error: e.message });
+        } else {
+          console.error("chef turn error", e);
+          send({ type: "done", error: "De lijn met de keuken hapert even — geef me zo opnieuw de opdracht." });
+        }
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" },
+  });
 }
 
 export async function GET() {
