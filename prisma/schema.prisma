@@ -71,15 +71,16 @@ enum Role {
 // ---------------------------------------------------------------------------
 
 model Recipe {
-  id         String   @id @default(cuid())
-  locationId String
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  dish       String // gerechtnaam
-  category   String
-  menuPrice  Decimal  @db.Decimal(10, 2)
-  popularity Int      @default(0) // couverts p/m -> Menu Matrix
-  isOnMenu   Boolean  @default(true) // Recipe Library
-  favorite   Boolean  @default(false)
+  id            String   @id @default(cuid())
+  locationId    String
+  location      Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  dish          String // gerechtnaam
+  category      String
+  menuPrice     Decimal  @db.Decimal(10, 2)
+  popularity    Int      @default(0) // couverts p/m -> Menu Matrix
+  isOnMenu      Boolean  @default(true) // Recipe Library
+  favorite      Boolean  @default(false)
+  componentOnly Boolean  @default(false) // alleen sub-recept; verborgen uit menu-overzichten
 
   versions        RecipeVersion[]
   activeVersion   RecipeVersion?    @relation("ActiveVersion", fields: [activeVersionId], references: [id])

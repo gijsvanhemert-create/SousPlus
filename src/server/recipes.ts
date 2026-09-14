@@ -35,6 +35,7 @@ export async function getLabRecipes(locationId: string): Promise<LabRecipe[]> {
     popularity: r.popularity,
     favorite: r.favorite,
     isOnMenu: r.isOnMenu,
+    componentOnly: r.componentOnly,
     activeVersionId: r.activeVersionId,
     versions: r.versions.map((v) => ({
       id: v.id,

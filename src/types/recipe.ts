@@ -51,6 +51,7 @@ export type LabRecipe = {
   popularity: number;
   favorite: boolean;
   isOnMenu: boolean;
+  componentOnly: boolean; // alleen sub-recept; niet in menu-overzichten
   activeVersionId: string | null;
   versions: LabVersion[];
 };

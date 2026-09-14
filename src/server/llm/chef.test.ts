@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
+import { Decimal } from "decimal.js";
 import { buildMenuContext, buildFlavorContext, type CtxRecipe } from "./chef";
+import type { VersionCost } from "@/lib/component-cost";
+
+// Kostenkaart zoals getVersionCostMap die levert (component-inclusief).
+function costMap(entries: Record<string, string>): Map<string, VersionCost> {
+  return new Map(
+    Object.entries(entries).map(([id, fc]) => [
+      id,
+      { foodcostPerServing: new Decimal(fc), unitCost: new Decimal(fc) },
+    ]),
+  );
+}
 
 // Regressie: eerder bevatte de APP-CONTEXT geen enkel id, waardoor Chef Auguste
 // update_recipe_version/save_recipe_version niet gericht kon aanroepen en een id
@@ -28,22 +40,29 @@ const salmon: CtxRecipe = {
 
 describe("buildMenuContext", () => {
   it("legt de echte id's bloot zodat het model versies gericht kan aanspreken", () => {
-    const [item] = buildMenuContext([salmon]);
+    const [item] = buildMenuContext([salmon], costMap({ ver_salmon_v12: "3.6" }));
     expect(item.recipeId).toBe("rec_salmon");
     expect(item.activeVersion?.id).toBe("ver_salmon_v12");
     expect(item.versions.map((v) => v.id)).toEqual(["ver_salmon_v11", "ver_salmon_v12"]);
   });
 
-  it("berekent marge/foodcost uit de actieve versie", () => {
-    const [item] = buildMenuContext([salmon]);
-    // (150/1000) * 24 = 3,60 foodcost per couvert.
+  it("neemt foodcost/marge over uit de kostenkaart (dezelfde als Lab/Library)", () => {
+    const [item] = buildMenuContext([salmon], costMap({ ver_salmon_v12: "3.6" }));
     expect(item.foodcostPerCover).toBeCloseTo(3.6, 2);
-    expect(item.marginPct).not.toBeNull();
+    // (28 − 3,6) / 28 × 100 = 87,1%.
+    expect(item.marginPct).toBe(87.1);
+  });
+
+  it("rekent component-kosten mee: gebruikt de (hogere) foodcost uit de map, niet ingrediënt-only", () => {
+    // Ingrediënt-only zou €3,60 zijn; met een component in de map is het €5,00.
+    const [item] = buildMenuContext([salmon], costMap({ ver_salmon_v12: "5.00" }));
+    expect(item.foodcostPerCover).toBe(5);
+    expect(item.marginPct).toBe(82.1); // (28 − 5)/28 × 100
   });
 
   it("geeft null-marge en een lege versielijst voor een recept zonder versies", () => {
     const leeg: CtxRecipe = { ...salmon, activeVersion: null, versions: [] };
-    const [item] = buildMenuContext([leeg]);
+    const [item] = buildMenuContext([leeg], new Map());
     expect(item.activeVersion).toBeNull();
     expect(item.marginPct).toBeNull();
     expect(item.versions).toEqual([]);

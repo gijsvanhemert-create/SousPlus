@@ -20,7 +20,8 @@ export type MenuItem = {
 export async function getMenuOverview(locationId: string): Promise<MenuItem[]> {
   const [recipes, costMap] = await Promise.all([
     prisma.recipe.findMany({
-      where: { locationId },
+      // Sub-recepten (alleen-component) horen niet in de menu-overzichten.
+      where: { locationId, componentOnly: false },
       include: { activeVersion: { select: { id: true, label: true } } },
       orderBy: [{ favorite: "desc" }, { dish: "asc" }],
     }),

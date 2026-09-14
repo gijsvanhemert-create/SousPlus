@@ -36,6 +36,7 @@ import {
   repointComponentToActive,
   searchRecipesForComponent,
 } from "@/server/recipe-actions";
+import { setComponentOnly } from "@/server/menu-actions";
 
 const SUP_COLOR: Record<string, string> = {
   HANOS: "text-info",
@@ -282,6 +283,19 @@ export function RecipeLab({
     setSelectedRecipeId(childRecipeId);
   }
 
+  // Markeer dit recept als (niet-)alleen-component; verbergt het uit menu-overzichten.
+  function onToggleComponentOnly() {
+    const next = !recipe.componentOnly;
+    setRecipes((rs) => rs.map((r) => (r.id === recipe.id ? { ...r, componentOnly: next } : r)));
+    startTransition(async () => {
+      await setComponentOnly({ recipeId: recipe.id, value: next });
+    });
+  }
+
+  // Recepten die als los gerecht kiesbaar zijn (alleen-component eruit, behalve
+  // het huidige zodat het via een componentlink geopend kan blijven).
+  const selectableRecipes = recipes.filter((r) => !r.componentOnly || r.id === recipe.id);
+
   return (
     <div>
       {/* Hero */}
@@ -303,15 +317,20 @@ export function RecipeLab({
                 <BadgeCheck size={12} /> Op de kaart
               </span>
             )}
+            {recipe.componentOnly && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-champagne-soft px-2 py-0.5 text-[10.5px] font-semibold text-gold-deep">
+                <Layers size={12} /> Alleen component
+              </span>
+            )}
           </div>
-          {recipes.length > 1 ? (
+          {selectableRecipes.length > 1 ? (
             <select
               value={recipe.id}
               onChange={(e) => setSelectedRecipeId(e.target.value)}
               aria-label="Kies gerecht"
               className="-ml-1 max-w-full cursor-pointer rounded-lg border border-transparent bg-transparent px-1 py-0.5 font-serif text-[32px] font-semibold leading-tight tracking-[-0.02em] text-charcoal hover:border-line"
             >
-              {recipes.map((r) => (
+              {selectableRecipes.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.dish}
                 </option>
@@ -326,16 +345,30 @@ export function RecipeLab({
             <p className="mt-2.5 max-w-[560px] text-sm leading-relaxed text-ink">{version.note}</p>
           )}
         </div>
-        <button
-          onClick={() => setKitchenView((k) => !k)}
-          className={`flex shrink-0 cursor-pointer items-center gap-2 self-start rounded-xl border px-3.5 py-2.5 text-[13px] font-semibold transition ${
-            kitchenView
-              ? "border-forest bg-forest text-white"
-              : "border-line bg-card text-ink hover:border-gold"
-          }`}
-        >
-          {kitchenView ? <EyeOff size={16} /> : <Eye size={16} />} Kitchen View
-        </button>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 self-start">
+          <button
+            onClick={onToggleComponentOnly}
+            disabled={isPending}
+            title="Verberg dit recept uit de menu-overzichten; alleen bruikbaar als component."
+            className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[13px] font-semibold transition disabled:opacity-60 ${
+              recipe.componentOnly
+                ? "border-gold bg-champagne-soft text-gold-deep"
+                : "border-line bg-card text-ink hover:border-gold"
+            }`}
+          >
+            <Layers size={16} /> Alleen component
+          </button>
+          <button
+            onClick={() => setKitchenView((k) => !k)}
+            className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[13px] font-semibold transition ${
+              kitchenView
+                ? "border-forest bg-forest text-white"
+                : "border-line bg-card text-ink hover:border-gold"
+            }`}
+          >
+            {kitchenView ? <EyeOff size={16} /> : <Eye size={16} />} Kitchen View
+          </button>
+        </div>
       </div>
 
       {/* Statistieken */}

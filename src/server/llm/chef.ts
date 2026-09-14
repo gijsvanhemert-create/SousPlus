@@ -1,6 +1,6 @@
 import { prisma } from "@/server/db";
-import { recipeFoodcost } from "@/lib/cost";
-import type { CostMode } from "@/lib/cost";
+import { getVersionCostMap } from "@/server/recipe-cost-graph";
+import type { VersionCost } from "@/lib/component-cost";
 import { FLAVOR_DB } from "@/lib/flavor-data";
 import { getRouter } from "./router";
 import { llmConfig } from "./config";
@@ -33,20 +33,13 @@ export type CtxRecipe = {
 // label). Zonder die id's kan het model update_recipe_version / save_recipe_version
 // niet gericht aanroepen en gokt het een id dat nooit matcht → "versie niet
 // gevonden". Alles is al op locationId gefilterd door de query hierboven.
-export function buildMenuContext(recipes: CtxRecipe[]) {
+export function buildMenuContext(recipes: CtxRecipe[], costByVersion: Map<string, VersionCost>) {
   return recipes.map((r) => {
     const v = r.activeVersion;
-    // recipeFoodcost werpt niet bij menuPrice 0 (sub-recepten); marge alleen
-    // zinvol bij een positieve prijs.
-    const foodcost = v
-      ? recipeFoodcost({
-          ingredients: v.ingredients.map((i) => ({
-            amount: i.amount.toString(),
-            mode: i.mode as CostMode,
-            pricePerUnit: i.pricePerUnit.toString(),
-          })),
-        })
-      : null;
+    // Foodcost/portie uit dezelfde resolver als Lab/Library (incl. componenten),
+    // zodat Auguste nooit afwijkende cijfers noemt. Marge alleen bij een positieve
+    // menuprijs (sub-recepten kunnen €0 zijn).
+    const foodcost = v ? costByVersion.get(v.id)?.foodcostPerServing ?? null : null;
     const price = Number(r.menuPrice);
     const fc = foodcost ? foodcost.toNumber() : null;
     return {
@@ -68,9 +61,11 @@ export function buildMenuContext(recipes: CtxRecipe[]) {
 }
 
 async function buildContext(locationId: string) {
-  const [recipes, catalogCount, checkpoints] = await Promise.all([
+  const [recipes, catalogCount, checkpoints, costMap] = await Promise.all([
     prisma.recipe.findMany({
-      where: { locationId },
+      // Sub-recepten (alleen-component) horen niet in het menu-overzicht dat
+      // Auguste ziet; ze zijn alleen relevant als component van een gerecht.
+      where: { locationId, componentOnly: false },
       include: {
         activeVersion: { include: { ingredients: true } },
         versions: { select: { id: true, label: true, name: true }, orderBy: { createdAt: "asc" } },
@@ -82,13 +77,16 @@ async function buildContext(locationId: string) {
       where: { locationId, active: true },
       select: { zone: true, target: true },
     }),
+    // Component-inclusieve kosten voor de HELE locatie (ook de versies van
+    // componenten, die niet in het gefilterde menu zitten).
+    getVersionCostMap(locationId),
   ]);
 
   return {
     location: locationId,
     catalogSize: catalogCount,
     haccp: checkpoints,
-    menu: buildMenuContext(recipes),
+    menu: buildMenuContext(recipes, costMap),
     flavor: buildFlavorContext(),
   };
 }
