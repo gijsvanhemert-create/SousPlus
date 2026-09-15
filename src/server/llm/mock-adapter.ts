@@ -1,4 +1,5 @@
 import type { LlmAdapter, LlmRequest, LlmResponse, AssistantBlock, LlmMessage } from "./types";
+import { SAMPLE_INVOICE_TEXT } from "@/lib/ocr-sample";
 
 // Mock-LLM voor lokale ontwikkeling en demo's zonder ANTHROPIC_API_KEY.
 //
@@ -38,6 +39,18 @@ function parseInvoiceMock(text: string): Array<{ name: string; qty: number; unit
     if (m) out.push({ name: m[1].trim(), qty: num(m[2]), unit: m[3], unitPrice: num(m[4]), total: num(m[5]) });
   }
   return out;
+}
+
+// Bevat het laatste user-bericht een foto/PDF (vision-invoer)? De mock kan een
+// echt beeld niet lezen, dus valt hij dan terug op de vaste voorbeeldfactuur.
+function lastUserHasMedia(messages: LlmMessage[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === "user") {
+      return Array.isArray(m.content) && m.content.some((c) => c.type === "image" || c.type === "document");
+    }
+  }
+  return false;
 }
 
 function toolResultRounds(messages: LlmMessage[]): number {
@@ -124,10 +137,13 @@ export class MockAdapter implements LlmAdapter {
   }
 
   async createMessage(req: LlmRequest): Promise<LlmResponse> {
-    // Tier 1: OCR-extractie. De mock parseert de geplakte factuurtekst regelmatig
-    // (regex) en geeft dezelfde JSON-array terug die het echte model zou geven.
+    // Tier 1: OCR-extractie. De mock parseert de factuurtekst regelmatig (regex)
+    // en geeft dezelfde JSON-array terug die het echte model zou geven. Bij een
+    // foto/PDF (die de mock niet kan lezen) valt hij terug op de voorbeeldfactuur,
+    // zodat de demo ook zonder API-sleutel regels toont.
     if (req.system.includes("OCR-extractielaag")) {
-      return text(JSON.stringify(parseInvoiceMock(rawLastUserText(req.messages))));
+      const src = lastUserHasMedia(req.messages) ? SAMPLE_INVOICE_TEXT : rawLastUserText(req.messages);
+      return text(JSON.stringify(parseInvoiceMock(src)));
     }
     if (this.script) {
       return this.script.shift() ?? text("Genoteerd, chef.");

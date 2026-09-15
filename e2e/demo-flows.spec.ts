@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { buildInvoicePdf } from "./fixtures/invoice-pdf";
+import { SAMPLE_INVOICE_TEXT } from "../src/lib/ocr-sample";
 
 // E2e over de volledige demoflows. Serieel (workers: 1); de Waakhond-flow draait
 // als laatste omdat die prijzen muteert (en daarna herstelt).
@@ -73,12 +75,36 @@ test("Chef Auguste: margeanalyse geeft een onderbouwd antwoord", async ({ page }
   await expect(page.getByText(/onder druk/i).first()).toBeVisible({ timeout: 20_000 });
 });
 
-test("OCR: voorbeeldfactuur scannen levert gekoppelde regels", async ({ page }) => {
+test("OCR: factuur-upload scannen levert gekoppelde regels", async ({ page }) => {
   await page.goto("/ocr");
-  await page.getByRole("button", { name: "Voorbeeld" }).click();
+  // Upload een échte, leesbare PDF met de voorbeeldfactuur, zodat de test werkt
+  // met zowel de mock als het echte vision-model. De Scan-knop is uitgeschakeld
+  // tot het bestand verwerkt is; Playwright wacht automatisch tot hij klikbaar is.
+  await page.setInputFiles('[data-testid="ocr-file-input"]', {
+    name: "factuur.pdf",
+    mimeType: "application/pdf",
+    buffer: buildInvoicePdf(SAMPLE_INVOICE_TEXT),
+  });
   await page.getByRole("button", { name: "Scan factuur" }).click();
-  await expect(page.getByText(/regels herkend/)).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText("Zalmfilet vers").first()).toBeVisible();
+  await expect(page.getByText(/regels herkend/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/zalmfilet/i).first()).toBeVisible();
+
+  // Fase 3 — inline-correctie: prijs bewerken en een regel uitsluiten vóór
+  // toepassen. We passen niets echt toe (geen DB-mutatie); we controleren dat de
+  // correctie-UI de toepassen-teller aanstuurt.
+  const priceField = page.locator('input[aria-label^="prijs "]').first();
+  await expect(priceField).toBeVisible();
+  await priceField.fill("99,99");
+  await expect(priceField).toHaveValue("99,99");
+
+  const applyCount = async () => {
+    const label = (await page.getByRole("button", { name: /voorraadprijzen bij/ }).textContent()) ?? "";
+    return Number(label.match(/Werk\s+(\d+)/)?.[1] ?? "0");
+  };
+  const before = await applyCount();
+  expect(before).toBeGreaterThan(0);
+  await page.locator('input[type="checkbox"][aria-label$=" bijwerken"]').first().uncheck();
+  expect(await applyCount()).toBe(before - 1);
 });
 
 test("HACCP: een meting vastleggen verschijnt in de audit trail", async ({ page }) => {
