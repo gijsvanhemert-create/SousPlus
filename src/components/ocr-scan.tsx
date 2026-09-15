@@ -175,6 +175,10 @@ export function OcrScan({ categories }: { categories: string[] }) {
     startTransition(async () => {
       try {
         const res = await addCatalogItemFromLineAction({ name, unit, price, category: row.newCategory });
+        if (!res.ok) {
+          patch(i, { saving: false, addError: res.error });
+          return;
+        }
         patch(i, {
           saving: false,
           adding: false,
@@ -184,7 +188,7 @@ export function OcrScan({ categories }: { categories: string[] }) {
           added: res.created ? "created" : "existing",
         });
       } catch {
-        patch(i, { saving: false, addError: "Toevoegen mislukt. Probeer het opnieuw." });
+        patch(i, { saving: false, addError: "Toevoegen mislukt door een onverwachte fout. Probeer het opnieuw." });
       }
     });
   }

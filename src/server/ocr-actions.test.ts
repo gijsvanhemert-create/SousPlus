@@ -24,7 +24,7 @@ describe("addCatalogItemFromLineAction", () => {
   it("maakt een nieuw catalogusartikel aan met defaults en een prijshistorie-regel", async () => {
     const res = await addCatalogItemFromLineAction({ name: "Mirin Hon", unit: "L", price: 9.8, category: "Overig" });
 
-    expect(res).toEqual({ id: "new1", name: "Mirin Hon", created: true });
+    expect(res).toEqual({ ok: true, id: "new1", name: "Mirin Hon", created: true });
 
     expect(db.catalogItem.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -49,9 +49,19 @@ describe("addCatalogItemFromLineAction", () => {
 
     const res = await addCatalogItemFromLineAction({ name: "mirin hon", unit: "L", price: 9.8, category: "Overig" });
 
-    expect(res).toEqual({ id: "exist1", name: "Mirin Hon", created: false });
+    expect(res).toEqual({ ok: true, id: "exist1", name: "Mirin Hon", created: false });
     expect(db.catalogItem.create).not.toHaveBeenCalled();
     expect(db.ingredientPrice.create).not.toHaveBeenCalled();
+  });
+
+  it("geeft een bruikbare melding bij een verlopen sessie (FK-violation P2003)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    db.catalogItem.create.mockRejectedValueOnce(Object.assign(new Error("FK"), { code: "P2003" }));
+
+    const res = await addCatalogItemFromLineAction({ name: "Nieuw artikel", unit: "kg", price: 5, category: "Overig" });
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/sessie/i);
   });
 
   it("weigert een negatieve prijs", async () => {
