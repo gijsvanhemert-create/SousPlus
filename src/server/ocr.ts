@@ -35,9 +35,44 @@ export type InvoiceLine = {
   keyword: string | null;
 };
 
-function keywordOf(name: string): string | null {
-  const words = name.toLowerCase().replace(/[^a-zà-ÿ\s]/gi, " ").split(/\s+/).filter((w) => w.length > 3);
-  return words[0] ?? null;
+// Betekenisvolle woorden (>3 letters) uit een regelnaam, voor matching.
+function tokensOf(name: string): string[] {
+  return name.toLowerCase().replace(/[^a-zà-ÿ\s]/gi, " ").split(/\s+/).filter((w) => w.length > 3);
+}
+
+// NB: het eerste betekenisvolle token (`tokens[0]`) blijft de sleutel voor de
+// recept-prijsupdate (applyInvoiceAction gebruikt dit als `contains` op
+// recipeIngredient) — vandaar dat we het als `keyword` op de regel bewaren.
+
+export type Candidate = { id: string; name: string; price: number };
+
+// Minimale score (som van lengtes van overlappende tokens) om als match te tellen.
+// Zo telt een lós generiek woord als "vers" (4) niet mee — dat komt in tientallen
+// artikelen voor — terwijl een specifiek woord als "zalmfilet" (9), of twee
+// overlappende tokens, wél kwalificeert.
+const MIN_MATCH_SCORE = 5;
+
+// Kiest uit kandidaten het artikel met de sterkste token-overlap, gewogen naar
+// tokenlengte (specifieker = zwaarder). Bij gelijke score wint de laagste prijs
+// (zoals voorheen). Ruimer dan de oude "eerste-woord"-match zodat we minder
+// duplicaten aanmaken, maar met een drempel tegen valse matches op generieke
+// woorden. De gebruiker bevestigt elke koppeling nog steeds vóór een prijsupdate.
+export function bestCandidate(tokens: string[], candidates: Candidate[]): Candidate | null {
+  let best: Candidate | null = null;
+  let bestScore = 0;
+  let bestPrice = Infinity;
+  for (const c of candidates) {
+    const lower = c.name.toLowerCase();
+    let score = 0;
+    for (const t of tokens) if (lower.includes(t)) score += t.length;
+    if (score < MIN_MATCH_SCORE) continue;
+    if (score > bestScore || (score === bestScore && c.price < bestPrice)) {
+      best = c;
+      bestScore = score;
+      bestPrice = c.price;
+    }
+  }
+  return best;
 }
 
 // Bouwt de user-content voor de router-call op basis van de bron: platte tekst
@@ -88,14 +123,19 @@ async function parseAndMatch(raw: string, locationId: string): Promise<InvoiceLi
     const o = item as Record<string, unknown>;
     const name = String(o.name ?? "").trim();
     if (!name) continue;
-    const keyword = keywordOf(name);
-    const match = keyword
-      ? await prisma.catalogItem.findFirst({
-          where: { locationId, name: { contains: keyword, mode: "insensitive" } },
-          orderBy: { price: "asc" },
-          select: { id: true, name: true },
-        })
-      : null;
+    const tokens = tokensOf(name);
+    const keyword = tokens[0] ?? null;
+    let match: { id: string; name: string } | null = null;
+    if (tokens.length > 0) {
+      const candidates = await prisma.catalogItem.findMany({
+        where: { locationId, OR: tokens.map((t) => ({ name: { contains: t, mode: "insensitive" } })) },
+        select: { id: true, name: true, price: true },
+      });
+      match = bestCandidate(
+        tokens,
+        candidates.map((c) => ({ id: c.id, name: c.name, price: Number(c.price) })),
+      );
+    }
     lines.push({
       name,
       qty: Number(o.qty) || 0,

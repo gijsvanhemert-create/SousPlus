@@ -31,6 +31,77 @@ export async function scanInvoiceFileAction(input: {
   return { lines };
 }
 
+// Nieuw catalogusartikel vanuit een niet-gekoppelde OCR-regel. Naam/prijs/eenheid
+// komen uit de regel; categorie kiest de gebruiker (default "Overig"). Leverancier
+// is onbekend op regelniveau, dus neutrale default BEIDE (later te verfijnen in de
+// catalogus). Gescopet op de huidige locatie, net als bestaande artikelen.
+const newItemSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  unit: z.string().trim().min(1).max(30),
+  price: z.number().nonnegative(),
+  category: z.string().trim().min(1).max(80),
+  supplier: z.enum(["HANOS", "SLIGRO", "BEIDE"]).default("BEIDE"),
+});
+
+// Resultaat met expliciet ok/error, zodat de UI een bruikbare melding kan tonen
+// i.p.v. een generieke "mislukt" (en de server de echte oorzaak logt).
+export type AddCatalogResult =
+  | { ok: true; id: string; name: string; created: boolean }
+  | { ok: false; error: string };
+
+export async function addCatalogItemFromLineAction(input: {
+  name: string;
+  unit: string;
+  price: number;
+  category: string;
+  supplier?: "HANOS" | "SLIGRO" | "BEIDE";
+}): Promise<AddCatalogResult> {
+  const { locationId } = await getTenant();
+  const data = newItemSchema.parse(input);
+
+  try {
+    // Dup-check: bestaat er al een artikel met (case-insensitief) dezelfde naam op
+    // deze locatie? Zo ja, geen duplicaat aanmaken maar het bestaande teruggeven.
+    const existing = await prisma.catalogItem.findFirst({
+      where: { locationId, name: { equals: data.name, mode: "insensitive" } },
+      select: { id: true, name: true },
+    });
+    if (existing) return { ok: true, id: existing.id, name: existing.name, created: false };
+
+    const price = data.price.toFixed(2);
+    const created = await prisma.catalogItem.create({
+      data: {
+        locationId,
+        name: data.name,
+        category: data.category,
+        supplier: data.supplier,
+        unit: data.unit,
+        price,
+      },
+      select: { id: true, name: true },
+    });
+    // Eerste prijspunt in de historie, herkenbaar als afkomstig uit een OCR-scan.
+    await prisma.ingredientPrice.create({ data: { catalogItemId: created.id, price, source: "ocr:new" } });
+
+    revalidatePath("/ocr");
+    revalidatePath("/ingredients");
+    return { ok: true, id: created.id, name: created.name, created: true };
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    // Gestructureerd loggen zodat dit in de serverlogs terug te vinden is.
+    console.error(
+      JSON.stringify({ at: "ocr.addCatalogItem", code: code ?? null, locationId, name: data.name, category: data.category }),
+      err,
+    );
+    // P2003 = foreign key violation: de locationId uit de sessie bestaat niet
+    // (meer) — meestal een verlopen/verouderde sessie (bv. na een DB-reseed).
+    if (code === "P2003") {
+      return { ok: false, error: "Je sessie lijkt verlopen (locatie niet gevonden). Log opnieuw in en probeer het opnieuw." };
+    }
+    return { ok: false, error: "Toevoegen aan de catalogus is mislukt. Probeer het later opnieuw." };
+  }
+}
+
 const applySchema = z.object({
   lines: z.array(
     z.object({
