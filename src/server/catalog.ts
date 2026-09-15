@@ -18,6 +18,21 @@ export type CatalogOverview = {
   counts: { hanos: number; sligro: number; total: number };
 };
 
+// Distinct categorieën van een locatie + de "Overig"-catch-all. Voor de
+// categorie-keuze bij het toevoegen van een niet-gekoppelde OCR-regel aan de
+// catalogus (lichter dan de volledige getCatalog).
+export async function listCatalogCategories(locationId: string): Promise<string[]> {
+  const rows = await prisma.catalogItem.findMany({
+    where: { locationId },
+    select: { category: true },
+    distinct: ["category"],
+    orderBy: { category: "asc" },
+  });
+  const set = new Set(rows.map((r) => r.category));
+  set.add("Overig");
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "nl"));
+}
+
 export async function getCatalog(locationId: string): Promise<CatalogOverview> {
   const rows = await prisma.catalogItem.findMany({
     where: { locationId },

@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { Camera, Upload, FileText, ScanLine, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Camera, Upload, FileText, ScanLine, Loader2, CheckCircle2, AlertTriangle, Plus, X } from "lucide-react";
 import { eur } from "@/lib/format";
-import { scanInvoiceFileAction, applyInvoiceAction } from "@/server/ocr-actions";
+import { scanInvoiceFileAction, applyInvoiceAction, addCatalogItemFromLineAction } from "@/server/ocr-actions";
 import { useWatchdogStore } from "@/lib/watchdog-store";
 import { parsePrice, toApplyPayload, type EditableLine } from "@/lib/ocr-apply";
 
@@ -13,8 +13,17 @@ const MAX_EDGE = 1568;
 const ALLOWED = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 
 type Selected = { kind: "image" | "pdf"; mediaType: string; data: string; name: string; preview: string | null };
-// Bewerkbare regel + het ruwe prijs-tekstveld dat de gebruiker intikt.
-type Row = EditableLine & { priceText: string };
+// Bewerkbare regel + de UI-status voor prijs-edit en het toevoeg-formulier.
+type Row = EditableLine & {
+  priceText: string;
+  adding: boolean;
+  saving: boolean;
+  newName: string;
+  newUnit: string;
+  newCategory: string;
+  added: null | "created" | "existing";
+  addError: string | null;
+};
 
 function stripDataUrl(dataUrl: string): string {
   return dataUrl.split(",")[1] ?? "";
@@ -55,7 +64,9 @@ async function resizeImage(file: File): Promise<{ data: string; preview: string 
   }
 }
 
-export function OcrScan() {
+export function OcrScan({ categories }: { categories: string[] }) {
+  const defaultCategory = categories.includes("Overig") ? "Overig" : categories[0] ?? "Overig";
+
   const [selected, setSelected] = useState<Selected | null>(null);
   const [stage, setStage] = useState<"idle" | "scanning" | "done">("idle");
   const [rows, setRows] = useState<Row[]>([]);
@@ -68,8 +79,10 @@ export function OcrScan() {
 
   const recognised = rows.length;
   const matched = rows.filter((r) => r.matchedId).length;
-  const unmatched = recognised - matched;
+  const unmatched = rows.filter((r) => !r.matchedId).length;
   const applyPayload = toApplyPayload(rows);
+
+  const patch = (i: number, next: Partial<Row>) => setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...next } : r)));
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -110,6 +123,13 @@ export function OcrScan() {
             ...l,
             include: l.matchedId != null,
             priceText: l.unitPrice.toFixed(2).replace(".", ","),
+            adding: false,
+            saving: false,
+            newName: l.name,
+            newUnit: l.unit,
+            newCategory: defaultCategory,
+            added: null,
+            addError: null,
           })),
         );
         if (res.lines.length === 0) {
@@ -137,6 +157,38 @@ export function OcrScan() {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, include: !r.include } : r)));
   }
 
+  function submitAdd(i: number) {
+    const row = rows[i];
+    if (!row || row.saving) return;
+    const name = row.newName.trim();
+    const unit = row.newUnit.trim();
+    const price = parsePrice(row.priceText);
+    if (!name || !unit) {
+      patch(i, { addError: "Naam en eenheid zijn verplicht." });
+      return;
+    }
+    if (price === null) {
+      patch(i, { addError: "Vul een geldige prijs in." });
+      return;
+    }
+    patch(i, { saving: true, addError: null });
+    startTransition(async () => {
+      try {
+        const res = await addCatalogItemFromLineAction({ name, unit, price, category: row.newCategory });
+        patch(i, {
+          saving: false,
+          adding: false,
+          matchedId: res.id,
+          matchedName: res.name,
+          include: false,
+          added: res.created ? "created" : "existing",
+        });
+      } catch {
+        patch(i, { saving: false, addError: "Toevoegen mislukt. Probeer het opnieuw." });
+      }
+    });
+  }
+
   function apply() {
     if (applyPayload.length === 0) return;
     startTransition(async () => {
@@ -150,8 +202,8 @@ export function OcrScan() {
     <div className="max-w-[860px]">
       <p className="mb-5 mt-0 max-w-[560px] text-[14.5px] leading-relaxed text-ink">
         Maak een foto van een leveranciersfactuur of upload een PDF — geen handmatige invoer meer. De OCR-laag (Tier 1)
-        leest de regels uit en koppelt ze aan je voorraadprijzen. Controleer en corrigeer ze voordat je de prijzen
-        bijwerkt.
+        leest de regels uit en koppelt ze aan je voorraadprijzen. Controleer en corrigeer ze, en voeg nieuwe artikelen toe
+        aan de catalogus, voordat je de prijzen bijwerkt.
       </p>
 
       <div className="grid gap-5 min-[720px]:grid-cols-2">
@@ -249,37 +301,35 @@ export function OcrScan() {
               </div>
 
               {rows.map((it, i) => (
-                <div
-                  key={i}
-                  className={`flex items-center gap-3 border-b border-canvas py-2.5 ${it.matchedId && !it.include ? "opacity-50" : ""}`}
-                >
-                  {it.matchedId ? (
-                    <input
-                      type="checkbox"
-                      checked={it.include}
-                      onChange={() => toggleInclude(i)}
-                      aria-label={`${it.name} bijwerken`}
-                      className="size-4 shrink-0 accent-gold"
-                    />
-                  ) : (
-                    <span className="size-4 shrink-0" aria-hidden />
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13.5px] font-medium">{it.name}</div>
-                    <div className="text-[11.5px] text-muted">
-                      {String(it.qty).replace(".", ",")} {it.unit}{" "}
-                      {it.matchedId ? (
-                        <span className="text-success">· {it.matchedName}</span>
-                      ) : (
-                        <span className="text-gold-deep">· niet gekoppeld</span>
-                      )}
+                <div key={i} className="border-b border-canvas py-2.5">
+                  {it.added ? (
+                    /* Zojuist toegevoegd of gekoppeld aan een bestaand artikel. */
+                    <div className="flex items-center gap-2 text-[13px]">
+                      <CheckCircle2 size={16} className="shrink-0 text-success" />
+                      <span className="min-w-0">
+                        <span className="font-medium">{it.name}</span>{" "}
+                        <span className="text-success">
+                          {it.added === "created" ? "· toegevoegd aan catalogus" : "· gekoppeld aan bestaand artikel"}
+                        </span>
+                      </span>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 tabular-nums">
-                    {it.matchedId ? (
-                      <label className="flex items-center gap-1 text-[13px]">
+                  ) : it.matchedId ? (
+                    /* Gekoppelde regel: prijs corrigeerbaar + in-/uitsluiten. */
+                    <div className={`flex items-center gap-3 ${it.include ? "" : "opacity-50"}`}>
+                      <input
+                        type="checkbox"
+                        checked={it.include}
+                        onChange={() => toggleInclude(i)}
+                        aria-label={`${it.name} bijwerken`}
+                        className="size-4 shrink-0 accent-gold"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13.5px] font-medium">{it.name}</div>
+                        <div className="text-[11.5px] text-muted">
+                          {String(it.qty).replace(".", ",")} {it.unit} <span className="text-success">· {it.matchedName}</span>
+                        </div>
+                      </div>
+                      <label className="flex items-center gap-1 text-[13px] tabular-nums">
                         <span className="text-muted">€</span>
                         <input
                           inputMode="decimal"
@@ -291,19 +341,110 @@ export function OcrScan() {
                           }`}
                         />
                       </label>
-                    ) : (
-                      <div className="text-right">
-                        <div className="text-[13.5px] font-semibold">{eur(it.unitPrice)}</div>
-                        <div className="text-[11.5px] text-muted">{eur(it.total)}</div>
+                    </div>
+                  ) : (
+                    /* Niet-gekoppelde regel: als nieuw catalogusartikel toevoegen. */
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13.5px] font-medium">{it.name}</div>
+                          <div className="text-[11.5px] text-muted">
+                            {String(it.qty).replace(".", ",")} {it.unit} <span className="text-gold-deep">· niet gekoppeld</span>
+                          </div>
+                        </div>
+                        {!it.adding && (
+                          <>
+                            <div className="text-right tabular-nums">
+                              <div className="text-[13.5px] font-semibold">{eur(it.unitPrice)}</div>
+                              <div className="text-[11.5px] text-muted">{eur(it.total)}</div>
+                            </div>
+                            <button
+                              onClick={() => patch(i, { adding: true, addError: null })}
+                              aria-label={`${it.name} toevoegen aan catalogus`}
+                              className="flex shrink-0 items-center gap-1 rounded-[9px] border border-line bg-card px-2.5 py-1.5 text-[12px] font-semibold text-ink"
+                            >
+                              <Plus size={14} /> Toevoegen
+                            </button>
+                          </>
+                        )}
                       </div>
-                    )}
-                  </div>
+
+                      {it.adding && (
+                        <div className="mt-2.5 rounded-[12px] border border-line bg-canvas p-3">
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className="text-[12px] font-semibold text-ink">Nieuw catalogusartikel</span>
+                            <button
+                              onClick={() => patch(i, { adding: false })}
+                              aria-label="Annuleren"
+                              className="grid size-6 place-items-center rounded-md text-muted hover:text-ink"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                          <div className="grid gap-2 min-[420px]:grid-cols-2">
+                            <label className="text-[11.5px] text-muted">
+                              Naam
+                              <input
+                                value={it.newName}
+                                onChange={(e) => patch(i, { newName: e.target.value })}
+                                aria-label="naam nieuw artikel"
+                                className="mt-0.5 w-full rounded-md border border-line bg-card px-2 py-1 text-[13px] text-charcoal"
+                              />
+                            </label>
+                            <label className="text-[11.5px] text-muted">
+                              Categorie
+                              <select
+                                value={it.newCategory}
+                                onChange={(e) => patch(i, { newCategory: e.target.value })}
+                                aria-label="categorie nieuw artikel"
+                                className="mt-0.5 w-full rounded-md border border-line bg-card px-2 py-1 text-[13px] text-charcoal"
+                              >
+                                {categories.map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="text-[11.5px] text-muted">
+                              Prijs (€)
+                              <input
+                                inputMode="decimal"
+                                value={it.priceText}
+                                onChange={(e) => setPrice(i, e.target.value)}
+                                aria-label="prijs nieuw artikel"
+                                className="mt-0.5 w-full rounded-md border border-line bg-card px-2 py-1 text-right text-[13px] font-semibold text-charcoal"
+                              />
+                            </label>
+                            <label className="text-[11.5px] text-muted">
+                              Eenheid
+                              <input
+                                value={it.newUnit}
+                                onChange={(e) => patch(i, { newUnit: e.target.value })}
+                                aria-label="eenheid nieuw artikel"
+                                className="mt-0.5 w-full rounded-md border border-line bg-card px-2 py-1 text-[13px] text-charcoal"
+                              />
+                            </label>
+                          </div>
+                          {it.addError && <p className="mt-2 text-[11.5px] text-danger">{it.addError}</p>}
+                          <button
+                            onClick={() => submitAdd(i)}
+                            disabled={it.saving}
+                            className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-[10px] bg-forest px-3 py-2 text-[13px] font-semibold text-white disabled:opacity-60"
+                          >
+                            {it.saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                            Toevoegen aan catalogus
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
 
               {unmatched > 0 && (
                 <p className="mt-2.5 text-[11.5px] text-muted">
-                  {unmatched} regel{unmatched === 1 ? "" : "s"} niet gekoppeld — deze worden niet bijgewerkt.
+                  {unmatched} regel{unmatched === 1 ? "" : "s"} niet gekoppeld — werk ze bij of voeg ze toe aan de catalogus.
                 </p>
               )}
 

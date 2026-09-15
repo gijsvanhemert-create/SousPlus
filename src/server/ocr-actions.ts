@@ -31,6 +31,56 @@ export async function scanInvoiceFileAction(input: {
   return { lines };
 }
 
+// Nieuw catalogusartikel vanuit een niet-gekoppelde OCR-regel. Naam/prijs/eenheid
+// komen uit de regel; categorie kiest de gebruiker (default "Overig"). Leverancier
+// is onbekend op regelniveau, dus neutrale default BEIDE (later te verfijnen in de
+// catalogus). Gescopet op de huidige locatie, net als bestaande artikelen.
+const newItemSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  unit: z.string().trim().min(1).max(30),
+  price: z.number().nonnegative(),
+  category: z.string().trim().min(1).max(80),
+  supplier: z.enum(["HANOS", "SLIGRO", "BEIDE"]).default("BEIDE"),
+});
+
+export async function addCatalogItemFromLineAction(input: {
+  name: string;
+  unit: string;
+  price: number;
+  category: string;
+  supplier?: "HANOS" | "SLIGRO" | "BEIDE";
+}): Promise<{ id: string; name: string; created: boolean }> {
+  const { locationId } = await getTenant();
+  const data = newItemSchema.parse(input);
+
+  // Dup-check: bestaat er al een artikel met (case-insensitief) dezelfde naam op
+  // deze locatie? Zo ja, geen duplicaat aanmaken maar het bestaande teruggeven.
+  const existing = await prisma.catalogItem.findFirst({
+    where: { locationId, name: { equals: data.name, mode: "insensitive" } },
+    select: { id: true, name: true },
+  });
+  if (existing) return { id: existing.id, name: existing.name, created: false };
+
+  const price = data.price.toFixed(2);
+  const created = await prisma.catalogItem.create({
+    data: {
+      locationId,
+      name: data.name,
+      category: data.category,
+      supplier: data.supplier,
+      unit: data.unit,
+      price,
+    },
+    select: { id: true, name: true },
+  });
+  // Eerste prijspunt in de historie, herkenbaar als afkomstig uit een OCR-scan.
+  await prisma.ingredientPrice.create({ data: { catalogItemId: created.id, price, source: "ocr:new" } });
+
+  revalidatePath("/ocr");
+  revalidatePath("/ingredients");
+  return { id: created.id, name: created.name, created: true };
+}
+
 const applySchema = z.object({
   lines: z.array(
     z.object({

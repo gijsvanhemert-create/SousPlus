@@ -107,6 +107,35 @@ test("OCR: factuur-upload scannen levert gekoppelde regels", async ({ page }) =>
   expect(await applyCount()).toBe(before - 1);
 });
 
+// Een fictief artikel dat niet in de catalogus zit (en geen specifiek token deelt
+// met bestaande artikelen), zodat de regel gegarandeerd niet-gekoppeld is.
+const ADD_INVOICE_TEXT =
+  "GROOTHANDEL EXOTICA B.V. — Factuur TEST-ADD-001\n" +
+  "------------------------------------------------\n" +
+  "Artikel                          Aantal   Prijs    Totaal\n" +
+  "Drakenfruit exotisch              3,0 kg   18,75    56,25";
+
+test("OCR: niet-gekoppelde regel toevoegen aan catalogus", async ({ page }) => {
+  await page.goto("/ocr");
+  await page.setInputFiles('[data-testid="ocr-file-input"]', {
+    name: "exotica.pdf",
+    mimeType: "application/pdf",
+    buffer: buildInvoicePdf(ADD_INVOICE_TEXT),
+  });
+  await page.getByRole("button", { name: "Scan factuur" }).click();
+  await expect(page.getByText(/regels herkend/)).toBeVisible({ timeout: 30_000 });
+
+  // Open het toevoeg-formulier van de (niet-gekoppelde) regel.
+  await page.getByRole("button", { name: /drakenfruit.*toevoegen aan catalogus/i }).first().click();
+
+  // Formulier met categorie-keuze verschijnt; kies "Overig" en voeg toe.
+  await expect(page.getByLabel("categorie nieuw artikel")).toBeVisible();
+  await page.getByLabel("categorie nieuw artikel").selectOption("Overig");
+  await page.getByRole("button", { name: "Toevoegen aan catalogus", exact: true }).click();
+
+  await expect(page.getByText(/toegevoegd aan catalogus/)).toBeVisible({ timeout: 15_000 });
+});
+
 test("HACCP: een meting vastleggen verschijnt in de audit trail", async ({ page }) => {
   await page.goto("/haccp");
   await page.getByLabel(/^meting/).first().fill("3");
