@@ -20,12 +20,32 @@ export class AnthropicAdapter implements LlmAdapter {
       ...(req.toolChoiceNone ? { tool_choice: { type: "none" } } : {}),
     });
 
-    const content: AssistantBlock[] = [];
-    for (const block of msg.content) {
-      if (block.type === "text") content.push({ type: "text", text: block.text });
-      else if (block.type === "tool_use")
-        content.push({ type: "tool_use", id: block.id, name: block.name, input: block.input });
-    }
-    return { content, stopReason: msg.stop_reason ?? "end_turn" };
+    return toLlmResponse(msg);
   }
+
+  async streamMessage(req: LlmRequest, onText: (delta: string) => void): Promise<LlmResponse> {
+    const stream = this.client.messages.stream({
+      model: req.model,
+      max_tokens: req.maxTokens ?? 1500,
+      system: req.system,
+      messages: req.messages as Anthropic.MessageParam[],
+      ...(req.tools ? { tools: req.tools as Anthropic.Tool[] } : {}),
+      ...(req.toolChoiceNone ? { tool_choice: { type: "none" } } : {}),
+    });
+    // Tekst-deltas doorsturen zodra ze binnenkomen (tool-input-JSON wordt niet
+    // gestreamd — dat komt in het uiteindelijke bericht).
+    stream.on("text", (delta) => onText(delta));
+    const msg = await stream.finalMessage();
+    return toLlmResponse(msg);
+  }
+}
+
+function toLlmResponse(msg: Anthropic.Message): LlmResponse {
+  const content: AssistantBlock[] = [];
+  for (const block of msg.content) {
+    if (block.type === "text") content.push({ type: "text", text: block.text });
+    else if (block.type === "tool_use")
+      content.push({ type: "tool_use", id: block.id, name: block.name, input: block.input });
+  }
+  return { content, stopReason: msg.stop_reason ?? "end_turn" };
 }

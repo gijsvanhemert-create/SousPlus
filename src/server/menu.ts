@@ -1,15 +1,17 @@
 import { prisma } from "@/server/db";
-import { recipeCost, type CostMode } from "@/lib/cost";
+import { getVersionCostMap } from "@/server/recipe-cost-graph";
 
 // Menukaart-overzicht met live marge — gedeeld door Recipe Library en Menu Matrix.
-// Marge komt uit de fase-2 kostenmotor over de actieve receptversie.
+// Marge komt uit de kostenmotor over de actieve receptversie, inclusief de kosten
+// van eventuele componenten/sub-recepten (via de recursieve resolver).
 
 export type MenuItem = {
   id: string;
   dish: string;
   category: string;
   menuPrice: number;
-  marginPct: number;
+  // null = geen zinvolle marge (bv. menuPrice 0 of geen actieve versie) → "n.v.t.".
+  marginPct: number | null;
   foodcostPerCover: number;
   popularity: number;
   favorite: boolean;
@@ -17,32 +19,32 @@ export type MenuItem = {
 };
 
 export async function getMenuOverview(locationId: string): Promise<MenuItem[]> {
-  const recipes = await prisma.recipe.findMany({
-    where: { locationId },
-    include: { activeVersion: { include: { ingredients: true } } },
-    orderBy: [{ favorite: "desc" }, { dish: "asc" }],
-  });
+  const [recipes, costMap] = await Promise.all([
+    prisma.recipe.findMany({
+      // Sub-recepten (alleen-component) horen niet in de menu-overzichten.
+      where: { locationId, componentOnly: false },
+      include: { activeVersion: { select: { id: true, label: true } } },
+      orderBy: [{ favorite: "desc" }, { dish: "asc" }],
+    }),
+    getVersionCostMap(locationId),
+  ]);
 
   return recipes.map((r) => {
     const v = r.activeVersion;
-    const cost =
-      v && v.ingredients.length > 0
-        ? recipeCost({
-            menuPrice: r.menuPrice.toString(),
-            ingredients: v.ingredients.map((i) => ({
-              amount: i.amount.toString(),
-              mode: i.mode as CostMode,
-              pricePerUnit: i.pricePerUnit.toString(),
-            })),
-          })
-        : null;
+    // Foodcost/portie van de actieve versie (incl. componenten) uit de resolver.
+    const foodcost = v ? costMap.get(v.id)?.foodcostPerServing ?? null : null;
+    const price = Number(r.menuPrice);
+    const fc = foodcost ? foodcost.toNumber() : null;
+    // Marge alleen zinvol bij een positieve menuprijs (sub-recepten kunnen 0 zijn);
+    // anders null → "n.v.t." (neutraal, geen valse rode waarschuwing).
+    const marginPct = fc !== null && price > 0 ? Number((((price - fc) / price) * 100).toFixed(1)) : null;
     return {
       id: r.id,
       dish: r.dish,
       category: r.category,
-      menuPrice: Number(r.menuPrice),
-      marginPct: cost ? Number(cost.marginPct.toFixed(1)) : 0,
-      foodcostPerCover: cost ? Number(cost.foodcostPerCover.toFixed(2)) : 0,
+      menuPrice: price,
+      marginPct,
+      foodcostPerCover: fc !== null ? Number(fc.toFixed(2)) : 0,
       popularity: r.popularity,
       favorite: r.favorite,
       versionLabel: v?.label ?? null,

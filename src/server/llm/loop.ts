@@ -18,7 +18,7 @@ export type LoopExecuteOutcome = {
 export type LoopDeps = {
   call: (args: { messages: LlmMessage[]; toolChoiceNone?: boolean }) => Promise<LlmResponse>;
   validate: (name: string, input: unknown) => Validation;
-  requiresConfirm: (name: string) => boolean;
+  requiresConfirm: (name: string, input: unknown) => boolean;
   execute: (name: string, input: unknown) => Promise<LoopExecuteOutcome>;
   autoConfirm: boolean;
   maxRounds?: number;
@@ -72,7 +72,7 @@ export async function runToolLoop(initialMessages: LlmMessage[], deps: LoopDeps)
     // wordt uitgevoerd. De beurt wordt niet bewaard; de client herhaalt met
     // autoConfirm. Zo blijven er geen losse tool_use-blocks achter.
     if (!deps.autoConfirm) {
-      const needsConfirm = toolUses.find((t) => deps.validate(t.name, t.input).ok && deps.requiresConfirm(t.name));
+      const needsConfirm = toolUses.find((t) => deps.validate(t.name, t.input).ok && deps.requiresConfirm(t.name, t.input));
       if (needsConfirm) {
         return {
           text: prose,

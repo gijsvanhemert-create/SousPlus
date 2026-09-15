@@ -164,6 +164,10 @@ async function main() {
   console.log("→ Seed gestart. Bestaande data wordt opgeschoond…");
 
   // Schoon op (idempotent). Volgorde respecteert FK's; cascades dekken de rest.
+  // RecipeComponent heeft Restrict-FK's naar childRecipe/childVersion, dus de
+  // org-cascade kan die recepten niet verwijderen zolang er component-links naar
+  // wijzen. Verwijder daarom eerst álle component-koppelingen, dan pas de rest.
+  await prisma.recipeComponent.deleteMany({});
   await prisma.organization.deleteMany({});
 
   const org = await prisma.organization.create({ data: { name: "Bistro+ Holding" } });

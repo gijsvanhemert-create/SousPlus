@@ -1,16 +1,28 @@
 import { prisma } from "@/server/db";
 import { getRouter } from "@/server/llm/router";
+import type { LlmResponse, UserContentBlock } from "@/server/llm/types";
 
 // Factuur Scan (OCR) — Tier 1 van de Intelligent Router (volume/goedkoop).
-// De ruwe factuurtekst wordt server-side geëxtraheerd naar gestructureerde
-// regels en gekoppeld aan catalogusartikelen. Nu tekst-paste; in productie een
-// echt visie-/OCR-model op beeld/PDF. Het LLM wordt nooit vanuit de browser
+// De factuur wordt server-side geëxtraheerd naar gestructureerde regels en
+// gekoppeld aan catalogusartikelen. Invoer kan tekst, een foto (image) of een
+// PDF zijn; vanaf een beeld/PDF gebruikt hetzelfde Tier 1-model (Claude vision)
+// exact dezelfde extractie en matching. Het LLM wordt nooit vanuit de browser
 // aangeroepen.
 
 export const OCR_SYSTEM =
-  "Je bent de OCR-extractielaag van SousPlus+. Je krijgt ruwe factuurtekst en geeft UITSLUITEND geldige JSON terug: " +
+  "Je bent de OCR-extractielaag van SousPlus+. Je krijgt een leveranciersfactuur — als tekst, foto of PDF — en geeft UITSLUITEND geldige JSON terug: " +
   'een array [{"name":string,"qty":number,"unit":string,"unitPrice":number,"total":number}]. ' +
   "Gebruik punten als decimaalteken. Geen uitleg, alleen de JSON-array.";
+
+// Taakinstructie die als tekstblok naast een foto/PDF meegaat (bij platte tekst
+// is de tekst zelf al de opdracht).
+const MEDIA_INSTRUCTION = "Lees de regels van deze factuur uit en geef de JSON-array terug.";
+
+// Bron van een te scannen factuur. `data` is telkens base64.
+export type InvoiceSource =
+  | { kind: "text"; text: string }
+  | { kind: "image"; mediaType: string; data: string }
+  | { kind: "pdf"; data: string };
 
 export type InvoiceLine = {
   name: string;
@@ -28,22 +40,40 @@ function keywordOf(name: string): string | null {
   return words[0] ?? null;
 }
 
-export async function scanInvoice(text: string, locationId: string): Promise<InvoiceLine[]> {
-  const router = getRouter();
-  const res = await router.run(
-    "tier1",
-    { system: OCR_SYSTEM, messages: [{ role: "user", content: text }], maxTokens: 1200 },
-    { locationId },
-  );
+// Bouwt de user-content voor de router-call op basis van de bron: platte tekst
+// blijft een string (identiek aan de oude tekst-flow), beeld/PDF worden een
+// content-block-array met het beeld gevolgd door de taakinstructie.
+function userContentFor(source: InvoiceSource): string | UserContentBlock[] {
+  switch (source.kind) {
+    case "text":
+      return source.text;
+    case "image":
+      return [
+        { type: "image", source: { type: "base64", media_type: source.mediaType, data: source.data } },
+        { type: "text", text: MEDIA_INSTRUCTION },
+      ];
+    case "pdf":
+      return [
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: source.data } },
+        { type: "text", text: MEDIA_INSTRUCTION },
+      ];
+  }
+}
 
-  const raw = res.content
+// Haalt de platte JSON-tekst uit het modelantwoord (strip eventuele code-fences).
+function extractJsonText(res: LlmResponse): string {
+  return res.content
     .filter((b): b is { type: "text"; text: string } => b.type === "text")
     .map((b) => b.text)
     .join("")
     .replace(/```json/g, "")
     .replace(/```/g, "")
     .trim();
+}
 
+// Parseert de JSON-regels en koppelt elke regel aan een catalogusartikel via een
+// keyword-match. Gedeeld door alle bronnen (tekst/foto/PDF) — hier zit de pariteit.
+async function parseAndMatch(raw: string, locationId: string): Promise<InvoiceLine[]> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -78,4 +108,21 @@ export async function scanInvoice(text: string, locationId: string): Promise<Inv
     });
   }
   return lines;
+}
+
+export async function scanInvoice(source: InvoiceSource, locationId: string): Promise<InvoiceLine[]> {
+  const router = getRouter();
+  const res = await router.run(
+    "tier1",
+    {
+      system: OCR_SYSTEM,
+      messages: [{ role: "user", content: userContentFor(source) }],
+      // Meer regels = meer output. Een PDF kan meerdere pagina's beslaan, dus die
+      // krijgt de ruimste limiet; een enkele foto minder, tekst het minst.
+      maxTokens: source.kind === "text" ? 1200 : source.kind === "pdf" ? 4096 : 2048,
+    },
+    { locationId },
+  );
+
+  return parseAndMatch(extractJsonText(res), locationId);
 }

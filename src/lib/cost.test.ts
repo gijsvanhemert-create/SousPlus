@@ -114,6 +114,24 @@ describe("recipeCost", () => {
   it("weigert een ongeldig aantal couverts", () => {
     expect(() => recipeCost({ menuPrice: "10", ingredients: [] }, { covers: 0 })).toThrow(/couverts/);
   });
+
+  it("telt component-regels mee in de foodcost en marge", () => {
+    // Component al geresolved tot unitCost €0,024/ml (zie component-cost); 50 ml = €1,20.
+    const cost = recipeCost({
+      menuPrice: "22.80",
+      ingredients: salmon, // 6,34
+      components: [{ amount: 50, unitCost: "0.024" }],
+    });
+    expectDecimal(cost.foodcostPerCover, "7.54"); // 6,34 + 1,20
+    expect(cost.marginPct.toDecimalPlaces(2).toString()).toBe("66.93");
+  });
+
+  it("werkt zonder components (backwards compatible)", () => {
+    const zonder = recipeCost({ menuPrice: "22.80", ingredients: salmon });
+    const leeg = recipeCost({ menuPrice: "22.80", ingredients: salmon, components: [] });
+    expectDecimal(zonder.foodcostPerCover, "6.34");
+    expectDecimal(leeg.foodcostPerCover, "6.34");
+  });
 });
 
 describe("Marge-Waakhond: herberekening bij prijswijziging", () => {

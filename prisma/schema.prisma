@@ -25,7 +25,7 @@ model Organization {
 }
 
 model Location {
-  id    String @id @default(cuid())
+  id    String       @id @default(cuid())
   orgId String
   org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   name  String
@@ -44,13 +44,13 @@ model Location {
 }
 
 model User {
-  id           String @id @default(cuid())
+  id           String   @id @default(cuid())
   locationId   String
   location     Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
   name         String
-  email        String @unique
+  email        String   @unique
   passwordHash String // credentials-auth (bcrypt)
-  role         Role   @default(CHEF)
+  role         Role     @default(CHEF)
 
   conversations ChefConversation[]
 
@@ -71,19 +71,21 @@ enum Role {
 // ---------------------------------------------------------------------------
 
 model Recipe {
-  id         String @id @default(cuid())
-  locationId String
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  dish       String // gerechtnaam
-  category   String
-  menuPrice  Decimal @db.Decimal(10, 2)
-  popularity Int     @default(0) // couverts p/m -> Menu Matrix
-  isOnMenu   Boolean @default(true) // Recipe Library
-  favorite   Boolean @default(false)
+  id            String   @id @default(cuid())
+  locationId    String
+  location      Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  dish          String // gerechtnaam
+  category      String
+  menuPrice     Decimal  @db.Decimal(10, 2)
+  popularity    Int      @default(0) // couverts p/m -> Menu Matrix
+  isOnMenu      Boolean  @default(true) // Recipe Library
+  favorite      Boolean  @default(false)
+  componentOnly Boolean  @default(false) // alleen sub-recept; verborgen uit menu-overzichten
 
   versions        RecipeVersion[]
-  activeVersion   RecipeVersion?  @relation("ActiveVersion", fields: [activeVersionId], references: [id])
-  activeVersionId String?         @unique
+  activeVersion   RecipeVersion?    @relation("ActiveVersion", fields: [activeVersionId], references: [id])
+  activeVersionId String?           @unique
+  usedAsComponent RecipeComponent[] @relation("UsedAsComponent") // waar dit recept als component wordt gebruikt
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -92,34 +94,66 @@ model Recipe {
 }
 
 model RecipeVersion {
-  id          String @id @default(cuid())
+  id          String   @id @default(cuid())
   recipeId    String
-  recipe      Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  recipe      Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
   label       String // "v1.2"
   name        String // "Witte Miso"
   note        String?
   prepTimeMin Int
   steps       String[] // bereidingswijze
 
-  ingredients   RecipeIngredient[]
-  activeForRecipe Recipe?          @relation("ActiveVersion")
+  // Yield: hoeveel één portie van deze versie is. Zo kan een parent een deel van
+  // een component gebruiken (bv. 50 ml van een saus) en klopt de kostprijs.
+  // Default 1 portie (PIECE) ⇒ bestaande recepten zijn backwards compatible.
+  yieldQty  Decimal  @default(1) @db.Decimal(10, 3)
+  yieldUnit String   @default("portie")
+  yieldMode CostMode @default(PIECE)
+
+  ingredients        RecipeIngredient[]
+  activeForRecipe    Recipe?            @relation("ActiveVersion")
+  components         RecipeComponent[]  @relation("ParentComponents") // sub-recepten die deze versie gebruikt
+  pinnedInComponents RecipeComponent[]  @relation("PinnedChildVersion") // component-links die naar deze versie pinnen
 
   createdAt DateTime @default(now())
 
   @@index([recipeId])
 }
 
+// Een component/sub-recept: een parent-receptversie gebruikt een ander recept
+// (gepind op een vaste kind-versie voor reproduceerbare kosten). Hoeveelheid per
+// couvert van de parent, in dezelfde WEIGHT/PIECE-logica als een ingrediënt.
+model RecipeComponent {
+  id              String        @id @default(cuid())
+  parentVersionId String
+  parentVersion   RecipeVersion @relation("ParentComponents", fields: [parentVersionId], references: [id], onDelete: Cascade)
+  childRecipeId   String
+  childRecipe     Recipe        @relation("UsedAsComponent", fields: [childRecipeId], references: [id], onDelete: Restrict)
+  childVersionId  String
+  childVersion    RecipeVersion @relation("PinnedChildVersion", fields: [childVersionId], references: [id], onDelete: Restrict)
+  amount          Decimal       @db.Decimal(10, 3) // per couvert van de parent (gram/ml of aantal)
+  unit            String // g, ml, portie, ...
+  mode            CostMode      @default(WEIGHT)
+
+  createdAt DateTime @default(now())
+
+  @@unique([parentVersionId, childRecipeId]) // geen dubbele component in dezelfde versie
+  @@index([parentVersionId])
+  @@index([childRecipeId])
+  @@index([childVersionId])
+}
+
 model RecipeIngredient {
-  id            String  @id @default(cuid())
+  id            String        @id @default(cuid())
   versionId     String
   version       RecipeVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   catalogItemId String? // koppeling naar catalogus (optioneel)
-  catalogItem   CatalogItem? @relation(fields: [catalogItemId], references: [id])
+  catalogItem   CatalogItem?  @relation(fields: [catalogItemId], references: [id])
   name          String
-  amount        Decimal  @db.Decimal(10, 3) // gram/ml (WEIGHT) of aantal (PIECE)
+  amount        Decimal       @db.Decimal(10, 3) // gram/ml (WEIGHT) of aantal (PIECE)
   unit          String // g, ml, stuk, fles, ...
-  mode          CostMode @default(WEIGHT)
-  pricePerUnit  Decimal  @db.Decimal(10, 2) // snapshot; live prijs via CatalogItem/IngredientPrice
+  mode          CostMode      @default(WEIGHT)
+  pricePerUnit  Decimal       @db.Decimal(10, 2) // snapshot; live prijs via CatalogItem/IngredientPrice
 
   @@index([versionId])
 }
@@ -134,17 +168,17 @@ enum CostMode {
 // ---------------------------------------------------------------------------
 
 model CatalogItem {
-  id           String  @id @default(cuid())
-  locationId   String
-  location     Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  externalId   String? // SKU bij leverancier (voor live feed)
-  name         String
-  category     String
-  supplier     Supplier
-  unit         String
-  price        Decimal @db.Decimal(10, 2)
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  externalId String? // SKU bij leverancier (voor live feed)
+  name       String
+  category   String
+  supplier   Supplier
+  unit       String
+  price      Decimal  @db.Decimal(10, 2)
 
-  priceHistory     IngredientPrice[]
+  priceHistory      IngredientPrice[]
   recipeIngredients RecipeIngredient[]
 
   createdAt DateTime @default(now())
@@ -159,12 +193,12 @@ enum Supplier {
 }
 
 model IngredientPrice {
-  id            String  @id @default(cuid())
+  id            String      @id @default(cuid())
   catalogItemId String
   item          CatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
-  price         Decimal @db.Decimal(10, 2)
+  price         Decimal     @db.Decimal(10, 2)
   source        String // "feed:hanos" | "ocr" | "manual"
-  recordedAt    DateTime @default(now())
+  recordedAt    DateTime    @default(now())
 
   @@index([catalogItemId])
 }
@@ -174,15 +208,15 @@ model IngredientPrice {
 // ---------------------------------------------------------------------------
 
 model HaccpCheckpoint {
-  id         String  @id @default(cuid())
+  id         String   @id @default(cuid())
   locationId String
   location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
   zone       String // "Koeling 1 . vis"
   target     String // "<= 4 C"
-  limitValue Decimal @db.Decimal(8, 2)
+  limitValue Decimal  @db.Decimal(8, 2)
   cmp        Cmp
   unit       String // "C"
-  active     Boolean @default(true)
+  active     Boolean  @default(true)
 
   @@index([locationId])
 }
@@ -222,25 +256,25 @@ enum HaccpStatus {
 // ---------------------------------------------------------------------------
 
 model ChefConversation {
-  id         String  @id @default(cuid())
+  id         String        @id @default(cuid())
   locationId String
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  location   Location      @relation(fields: [locationId], references: [id], onDelete: Cascade)
   userId     String
-  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages   ChefMessage[]
-  createdAt  DateTime @default(now())
+  createdAt  DateTime      @default(now())
 
   @@index([locationId, userId])
 }
 
 model ChefMessage {
-  id             String  @id @default(cuid())
+  id             String           @id @default(cuid())
   conversationId String
   conversation   ChefConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role           MsgRole
   content        String // tekst of JSON (tool_use / tool_result)
   toolName       String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime         @default(now())
 
   @@index([conversationId])
 }
@@ -256,15 +290,15 @@ enum MsgRole {
 // ---------------------------------------------------------------------------
 
 model MarginAlert {
-  id              String   @id @default(cuid())
-  locationId      String
-  location        Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  ingredient      String
-  deltaPct        Decimal  @db.Decimal(6, 2)
+  id               String   @id @default(cuid())
+  locationId       String
+  location         Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  ingredient       String
+  deltaPct         Decimal  @db.Decimal(6, 2)
   affectedRecipeId String?
-  resolved        Boolean  @default(false)
-  resolution      String?
-  createdAt       DateTime @default(now())
+  resolved         Boolean  @default(false)
+  resolution       String?
+  createdAt        DateTime @default(now())
 
   @@index([locationId])
 }

@@ -13,6 +13,21 @@ export type LabIngredient = {
   pricePerUnit: string; // Decimal als string (per kg/L of per eenheid)
 };
 
+// Een component/sub-recept dat een parent-versie gebruikt. Gepind op een vaste
+// kind-versie (versionLabel); childActiveVersionId dient om in de UI te tonen dat
+// er een nieuwere actieve versie beschikbaar is.
+export type LabComponent = {
+  id: string;
+  childRecipeId: string;
+  childVersionId: string;
+  name: string; // gerechtnaam van de component
+  versionLabel: string; // label van de gepinde kind-versie
+  childActiveVersionId: string | null; // huidige actieve versie van de component
+  amount: string; // Decimal als string (per couvert van de parent)
+  unit: string;
+  mode: CostMode;
+};
+
 export type LabVersion = {
   id: string;
   label: string;
@@ -20,7 +35,12 @@ export type LabVersion = {
   note: string | null;
   prepTimeMin: number;
   steps: string[];
+  // Yield: hoeveel één portie van deze versie is (voor component-schaling).
+  yieldQty: string; // Decimal als string
+  yieldUnit: string;
+  yieldMode: CostMode;
   ingredients: LabIngredient[];
+  components: LabComponent[];
 };
 
 export type LabRecipe = {
@@ -31,6 +51,7 @@ export type LabRecipe = {
   popularity: number;
   favorite: boolean;
   isOnMenu: boolean;
+  componentOnly: boolean; // alleen sub-recept; niet in menu-overzichten
   activeVersionId: string | null;
   versions: LabVersion[];
 };
@@ -42,4 +63,13 @@ export type CatalogResult = {
   supplier: string;
   unit: string;
   price: string; // Decimal als string
+};
+
+// Kandidaat-recept voor de component-picker (bestaande recepten i.p.v. catalogus).
+export type CandidateRecipe = {
+  id: string;
+  dish: string;
+  category: string;
+  activeVersionId: string;
+  versionLabel: string;
 };

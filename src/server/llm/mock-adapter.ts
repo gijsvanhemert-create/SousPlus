@@ -1,4 +1,5 @@
 import type { LlmAdapter, LlmRequest, LlmResponse, AssistantBlock, LlmMessage } from "./types";
+import { SAMPLE_INVOICE_TEXT } from "@/lib/ocr-sample";
 
 // Mock-LLM voor lokale ontwikkeling en demo's zonder ANTHROPIC_API_KEY.
 //
@@ -40,6 +41,18 @@ function parseInvoiceMock(text: string): Array<{ name: string; qty: number; unit
   return out;
 }
 
+// Bevat het laatste user-bericht een foto/PDF (vision-invoer)? De mock kan een
+// echt beeld niet lezen, dus valt hij dan terug op de vaste voorbeeldfactuur.
+function lastUserHasMedia(messages: LlmMessage[]): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === "user") {
+      return Array.isArray(m.content) && m.content.some((c) => c.type === "image" || c.type === "document");
+    }
+  }
+  return false;
+}
+
 function toolResultRounds(messages: LlmMessage[]): number {
   return messages.filter(
     (m) => m.role === "user" && Array.isArray(m.content) && m.content.some((c) => c.type === "tool_result"),
@@ -63,6 +76,32 @@ function lastToolResultJson(messages: LlmMessage[]): unknown {
   return null;
 }
 
+// Leest de APP-CONTEXT-JSON terug uit de system-prompt, zodat de mock met de
+// ECHTE recipe-/versie-id's kan werken (net als het echte model zou doen).
+type CtxMenuItem = { recipeId: string; dish: string; activeVersion: { id: string } | null };
+function appContextMenu(system: string): CtxMenuItem[] {
+  const marker = "APP-CONTEXT (JSON):\n";
+  const idx = system.indexOf(marker);
+  if (idx === -1) return [];
+  try {
+    const ctx = JSON.parse(system.slice(idx + marker.length)) as { menu?: CtxMenuItem[] };
+    return ctx.menu ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function findRecipeInQuery(menu: CtxMenuItem[], q: string): CtxMenuItem | null {
+  const hits = menu.filter((m) => q.includes(m.dish.toLowerCase()));
+  hits.sort((a, b) => b.dish.length - a.dish.length); // langste (meest specifieke) match wint
+  return hits[0] ?? null;
+}
+
+function parseTargetPrice(q: string): number | null {
+  const m = q.match(/(?:naar|op|€|=)\s*€?\s*(\d+(?:[.,]\d{1,2})?)/) ?? q.match(/(\d+(?:[.,]\d{1,2})?)/);
+  return m ? Number(m[1].replace(",", ".")) : null;
+}
+
 function text(t: string): LlmResponse {
   return { content: [{ type: "text", text: t }], stopReason: "end_turn" };
 }
@@ -82,11 +121,29 @@ export class MockAdapter implements LlmAdapter {
     this.script = script;
   }
 
+  // Streaming voor de mock: bereken het antwoord en geef de tekst in korte
+  // brokjes door, zodat de streaming-UX ook zonder API-sleutel werkt/testbaar is.
+  async streamMessage(req: LlmRequest, onText: (delta: string) => void): Promise<LlmResponse> {
+    const res = await this.createMessage(req);
+    const text = res.content
+      .filter((b): b is { type: "text"; text: string } => b.type === "text")
+      .map((b) => b.text)
+      .join("\n");
+    for (const chunk of text.match(/\S+\s*/g) ?? []) {
+      onText(chunk);
+      await new Promise((r) => setTimeout(r, 8));
+    }
+    return res;
+  }
+
   async createMessage(req: LlmRequest): Promise<LlmResponse> {
-    // Tier 1: OCR-extractie. De mock parseert de geplakte factuurtekst regelmatig
-    // (regex) en geeft dezelfde JSON-array terug die het echte model zou geven.
+    // Tier 1: OCR-extractie. De mock parseert de factuurtekst regelmatig (regex)
+    // en geeft dezelfde JSON-array terug die het echte model zou geven. Bij een
+    // foto/PDF (die de mock niet kan lezen) valt hij terug op de voorbeeldfactuur,
+    // zodat de demo ook zonder API-sleutel regels toont.
     if (req.system.includes("OCR-extractielaag")) {
-      return text(JSON.stringify(parseInvoiceMock(rawLastUserText(req.messages))));
+      const src = lastUserHasMedia(req.messages) ? SAMPLE_INVOICE_TEXT : rawLastUserText(req.messages);
+      return text(JSON.stringify(parseInvoiceMock(src)));
     }
     if (this.script) {
       return this.script.shift() ?? text("Genoteerd, chef.");
@@ -127,6 +184,25 @@ export class MockAdapter implements LlmAdapter {
                 ? "supplier"
                 : "library";
       return toolCall("navigate_app", { tab }, "Ik open het voor je, chef.");
+    }
+
+    // Bestaande receptversie aanpassen (bv. menuprijs) — gebruikt de echte
+    // versie-id uit de APP-CONTEXT, zodat update_recipe_version daadwerkelijk het
+    // juiste recept raakt in plaats van een gegokt id.
+    if (/(menuprijs|verhoog|verlaag|zet de prijs|prijs.*(aan|naar|op))/.test(q) && !/leverancier/.test(q)) {
+      if (rounds === 0) {
+        const target = findRecipeInQuery(appContextMenu(req.system), q);
+        const price = parseTargetPrice(q);
+        if (target?.activeVersion?.id && price) {
+          return toolCall(
+            "update_recipe_version",
+            { id: target.activeVersion.id, menuPrice: price },
+            `Ik pas de menuprijs van ${target.dish} aan naar €${price.toFixed(2)}.`,
+          );
+        }
+        return text("Welk gerecht en welke nieuwe prijs, chef? Dan pas ik de versie meteen aan.");
+      }
+      return text("De nieuwe menuprijs staat vast; de marge is direct herberekend.");
     }
 
     if (/biet|voorstel|nieuw|gerecht|recept|stel.*voor/.test(q)) {

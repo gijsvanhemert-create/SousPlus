@@ -36,9 +36,27 @@ export interface CostIngredient {
 /** Map catalogItemId → nieuwe prijs-per-eenheid (voor de Marge-Waakhond). */
 export type PriceOverrides = Map<string, DecimalInput> | Record<string, DecimalInput>;
 
+/**
+ * Een component/sub-recept-regel voor de kostprijs. `unitCost` is de al berekende
+ * kost per basiseenheid van de component (g/ml of per portie) — zie
+ * lib/component-cost.ts, die de recursie + yield-deling doet. De regelkost is dan
+ * simpelweg amount × unitCost.
+ */
+export interface ComponentCost {
+  amount: DecimalInput; // per couvert van de parent
+  unitCost: DecimalInput; // kost per g/ml of per portie van de component
+}
+
+/** Kost van één component-regel voor één couvert: amount × unitCost. */
+export function componentCost(component: ComponentCost): Decimal {
+  return toDecimal(component.amount).mul(toDecimal(component.unitCost));
+}
+
 export interface RecipeCostInput {
   menuPrice: DecimalInput;
   ingredients: CostIngredient[];
+  /** Optionele sub-recepten; hun kosten tellen mee in de foodcost per couvert. */
+  components?: ComponentCost[];
 }
 
 export interface RecipeCostOptions {
@@ -104,6 +122,19 @@ export function foodcost(ingredients: CostIngredient[], overrides?: PriceOverrid
 }
 
 /**
+ * Foodcost per couvert incl. componenten — zonder menuprijs, dus veilig voor
+ * (sub-)recepten met menuPrice 0 (waar marge niet gedefinieerd is).
+ */
+export function recipeFoodcost(
+  input: { ingredients: CostIngredient[]; components?: ComponentCost[] },
+  overrides?: PriceOverrides,
+): Decimal {
+  const ingredientsPerCover = foodcost(input.ingredients, overrides);
+  const componentsPerCover = (input.components ?? []).reduce((sum, c) => sum.add(componentCost(c)), ZERO);
+  return ingredientsPerCover.add(componentsPerCover);
+}
+
+/**
  * Volledige kost-/margeberekening voor een receptversie.
  * Dezelfde motor draait de Marge-Waakhond, met `options.overrides` voor
  * gewijzigde leveranciersprijzen.
@@ -121,7 +152,7 @@ export function recipeCost(input: RecipeCostInput, options: RecipeCostOptions = 
     throw new Error("menuPrice moet groter dan 0 zijn voor margeberekening");
   }
 
-  const foodcostPerCover = foodcost(input.ingredients, options.overrides);
+  const foodcostPerCover = recipeFoodcost(input, options.overrides);
   const grossProfitPerCover = menuPrice.sub(foodcostPerCover);
   const marginRatio = grossProfitPerCover.div(menuPrice);
 

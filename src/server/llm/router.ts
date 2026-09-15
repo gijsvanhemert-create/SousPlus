@@ -50,6 +50,36 @@ export class IntelligentRouter {
     return this.timed(tier, model, opts.locationId, fullReq);
   }
 
+  /**
+   * Als `run`, maar streamt tekst-deltas via `onText` terwijl het model genereert.
+   * Geen caching (alleen voor tier2/tool-use gebruikt). Valt terug op createMessage
+   * wanneer de adapter geen streaming ondersteunt.
+   */
+  async runStream(
+    tier: Tier,
+    req: Omit<LlmRequest, "model">,
+    opts: { locationId: string },
+    onText: (delta: string) => void,
+  ): Promise<LlmResponse> {
+    this.enforceRateLimit(opts.locationId);
+    const model = modelForTier(tier);
+    const fullReq: LlmRequest = { ...req, model };
+    const start = Date.now();
+    let res: LlmResponse;
+    if (this.adapter.streamMessage) {
+      res = await this.adapter.streamMessage(fullReq, onText);
+    } else {
+      res = await this.adapter.createMessage(fullReq);
+      const text = res.content
+        .filter((b): b is { type: "text"; text: string } => b.type === "text")
+        .map((b) => b.text)
+        .join("\n");
+      if (text) onText(text);
+    }
+    this.log(tier, model, Date.now() - start, false, opts.locationId);
+    return res;
+  }
+
   private async timed(
     tier: Tier,
     model: string,

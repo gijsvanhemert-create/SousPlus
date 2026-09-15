@@ -68,6 +68,31 @@ describe("runToolLoop", () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it("gate't op basis van de tool-INPUT (bevestiging alleen bij bepaalde velden)", async () => {
+    const execute = vi.fn(async () => ({ text: "opgeslagen" }));
+    // save_recipe_version bevestigt alleen wanneer asComponentOf is meegegeven.
+    const deps = baseDeps({
+      call: scriptedCall([toolRes("save_recipe_version", { name: "Saus", asComponentOf: { parentRecipeId: "p" } }, "Ik koppel de saus.")]),
+      requiresConfirm: (name, input) => name === "save_recipe_version" && !!(input as { asComponentOf?: unknown }).asComponentOf,
+      execute,
+    });
+    const result = await runToolLoop([{ role: "user", content: "maak saus als component" }], deps);
+    expect(result.pendingConfirmation?.tool).toBe("save_recipe_version");
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("gate't NIET wanneer de input de bevestiging niet triggert", async () => {
+    const execute = vi.fn(async () => ({ text: "opgeslagen" }));
+    const deps = baseDeps({
+      call: scriptedCall([toolRes("save_recipe_version", { name: "Saus" }, "Ik sla op."), textRes("Klaar.")]),
+      requiresConfirm: (name, input) => name === "save_recipe_version" && !!(input as { asComponentOf?: unknown }).asComponentOf,
+      execute,
+    });
+    const result = await runToolLoop([{ role: "user", content: "sla saus op" }], deps);
+    expect(result.pendingConfirmation).toBeUndefined();
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   it("voert de destructieve actie uit zodra autoConfirm gezet is", async () => {
     const execute = vi.fn(async () => ({ text: "gewisseld", navigateTo: "/supplier" }));
     const deps = baseDeps({

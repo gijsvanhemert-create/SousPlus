@@ -14,8 +14,24 @@ export type ToolResultBlock = {
   is_error?: boolean;
 };
 
+// Beeld-/documentinvoer voor vision (factuur-OCR vanaf foto of PDF). Structureel
+// gelijk aan de Anthropic image/document content-blocks, zodat de adapter ze
+// zonder vertaallaag kan doorgeven. `data` is altijd base64.
+export type ImageBlock = {
+  type: "image";
+  source: { type: "base64"; media_type: string; data: string };
+};
+export type DocumentBlock = {
+  type: "document";
+  source: { type: "base64"; media_type: "application/pdf"; data: string };
+};
+
+// Alles wat in een user-bericht kan zitten: platte tekst, tool-resultaten uit de
+// tool-loop, of beeld/PDF voor vision.
+export type UserContentBlock = TextBlock | ImageBlock | DocumentBlock | ToolResultBlock;
+
 export type LlmMessage =
-  | { role: "user"; content: string | ToolResultBlock[] }
+  | { role: "user"; content: string | UserContentBlock[] }
   | { role: "assistant"; content: AssistantBlock[] };
 
 export type ToolSchema = {
@@ -45,4 +61,11 @@ export interface LlmAdapter {
   /** Naam van de adapter (voor logging): "mock" | "anthropic". */
   readonly name: string;
   createMessage(req: LlmRequest): Promise<LlmResponse>;
+  /**
+   * Optioneel streamen: roept `onText` aan met tekst-deltas terwijl het model
+   * genereert, en levert daarna dezelfde volledige LlmResponse als createMessage
+   * (inclusief tool_use-blocks). Adapters zonder streaming laten dit weg; de
+   * router valt dan terug op createMessage.
+   */
+  streamMessage?(req: LlmRequest, onText: (delta: string) => void): Promise<LlmResponse>;
 }

@@ -4,13 +4,30 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/server/db";
 import { getTenant } from "@/server/tenant";
-import { scanInvoice, type InvoiceLine } from "./ocr";
+import { scanInvoice, type InvoiceLine, type InvoiceSource } from "./ocr";
 import { evaluateMarginAlerts, type PriceChange } from "./watchdog";
 
-export async function scanInvoiceAction(text: string): Promise<{ lines: InvoiceLine[] }> {
+// Foto-/PDF-upload van een factuur. `data` is base64 (zonder data-URL-prefix).
+// De grootte-limiet loopt gelijk op met serverActions.bodySizeLimit; base64 is
+// ~4/3 van de binaire grootte, dus ~14M tekens ≈ ~10MB bestand.
+const fileSchema = z.object({
+  kind: z.enum(["image", "pdf"]),
+  mediaType: z.enum(["image/jpeg", "image/png", "image/webp", "application/pdf"]),
+  data: z.string().min(1).max(14_000_000),
+});
+
+export async function scanInvoiceFileAction(input: {
+  kind: "image" | "pdf";
+  mediaType: string;
+  data: string;
+}): Promise<{ lines: InvoiceLine[] }> {
   const tenant = await getTenant();
-  const clean = z.string().min(1).max(8000).parse(text);
-  const lines = await scanInvoice(clean, tenant.locationId);
+  const parsed = fileSchema.parse(input);
+  const source: InvoiceSource =
+    parsed.kind === "pdf"
+      ? { kind: "pdf", data: parsed.data }
+      : { kind: "image", mediaType: parsed.mediaType, data: parsed.data };
+  const lines = await scanInvoice(source, tenant.locationId);
   return { lines };
 }
 

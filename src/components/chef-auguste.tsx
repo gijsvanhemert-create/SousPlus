@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChefHat, Send, Sparkles, Check, X, Loader2, ArrowRight } from "lucide-react";
 import { useChefStore } from "@/lib/chef-store";
+import { ChefMarkdown } from "@/components/chef-markdown";
 
 const TASKS = [
   "Analyseer de marge van het menu en wijs het zwakste gerecht aan.",
@@ -39,6 +40,11 @@ export function ChefAuguste() {
   }
 
   const showSuggestions = loaded && messages.length <= 1;
+  // "Werkt…"-indicator alleen tonen zolang er nog geen tekst streamt in de laatste
+  // chef-bubbel; zodra de tekst binnendruppelt is de indicator overbodig.
+  const last = messages[messages.length - 1];
+  const streamingStarted = last?.role === "chef" && last.text.length > 0;
+  const showWorking = busy && !streamingStarted;
 
   return (
     <div className="flex min-h-[calc(100vh-220px)] flex-col">
@@ -72,8 +78,8 @@ export function ChefAuguste() {
               <div className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-gold to-gold-deep font-serif text-sm font-semibold text-white">
                 <ChefHat size={18} />
               </div>
-              <div className="max-w-[80%] rounded-2xl rounded-tl-sm border border-champagne bg-card px-4 py-3 shadow-[0_1px_0_var(--color-champagne-soft)]">
-                <p className="text-[14.5px] leading-relaxed text-ink">{m.text}</p>
+              <div className="max-w-[80%] min-w-0 rounded-2xl rounded-tl-sm border border-champagne bg-card px-4 py-3 shadow-[0_1px_0_var(--color-champagne-soft)]">
+                <ChefMarkdown text={m.text} />
                 {m.actions && m.actions.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {m.actions.map((a, k) =>
@@ -101,7 +107,7 @@ export function ChefAuguste() {
           ),
         )}
 
-        {busy && (
+        {showWorking && (
           <div className="flex items-center gap-2 pl-12 text-[13px] text-muted">
             <Loader2 size={14} className="animate-spin" /> Chef Auguste werkt…
           </div>

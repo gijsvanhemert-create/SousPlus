@@ -4,53 +4,51 @@ import { useRouter } from "next/navigation";
 import { Wand2 } from "lucide-react";
 import { pct } from "@/lib/format";
 import type { MenuItem } from "@/server/menu";
-
-const POP_MID = 150;
-const MARGIN_MID = 72;
+import {
+  MATRIX,
+  X0,
+  X1,
+  Y0,
+  Y1,
+  scaleX,
+  scaleY,
+  quadOf,
+  placeLabels,
+  cornerLabelBoxes,
+  type Quad,
+  type LabelInput,
+} from "@/lib/matrix-layout";
 
 const COL = { star: "#3f7a5b", plow: "#b6892f", puzzle: "#3e6e8c", dog: "#b4412e" };
 const LINE = "#e8e3d8";
 const MUTED = "#8a857c";
 const CHARCOAL = "#1e2a22";
 
-type Quad = "star" | "plow" | "puzzle" | "dog";
 const QUAD: Record<Quad, { label: string; tip: string }> = {
-  star: { label: "Sterren", tip: "Hoge marge én populair — koester en houd zichtbaar." },
-  plow: { label: "Werkpaarden", tip: "Populair maar magere marge — verlaag foodcost of verhoog prijs." },
-  puzzle: { label: "Puzzels", tip: "Goede marge, weinig verkocht — promoot of herpositioneer." },
-  dog: { label: "Honden", tip: "Lage marge én weinig verkocht — heroverweeg of schrap." },
+  star: { label: "Winner", tip: "Hoge marge én populair — koester en houd zichtbaar." },
+  plow: { label: "Runner", tip: "Populair maar magere marge — verlaag foodcost of verhoog prijs." },
+  puzzle: { label: "Sleeper", tip: "Goede marge, weinig verkocht — promoot of herpositioneer." },
+  dog: { label: "Loser", tip: "Lage marge én weinig verkocht — heroverweeg of schrap." },
 };
 
-function quadOf(pop: number, margin: number): Quad {
-  const hi = pop >= POP_MID;
-  const hm = margin >= MARGIN_MID;
-  return hi && hm ? "star" : hi && !hm ? "plow" : !hi && hm ? "puzzle" : "dog";
-}
+// Alleen gerechten met een zinvolle marge kunnen op de marge-as geplot worden;
+// recepten zonder marge (n.v.t.) laten we buiten de matrix.
+type PlottableItem = MenuItem & { marginPct: number };
 
 export function MenuMatrix({ items }: { items: MenuItem[] }) {
   const router = useRouter();
+  const plotted: PlottableItem[] = items.filter((d): d is PlottableItem => d.marginPct != null);
 
-  const W = 560,
-    H = 380,
-    padL = 52,
-    padB = 44,
-    padT = 16,
-    padR = 16;
-  const x0 = padL,
-    x1 = W - padR,
-    y0 = H - padB,
-    y1 = padT;
-  const popMin = 40,
-    popMax = 320,
-    marMin = 60,
-    marMax = 86;
-  const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
-  const sx = (p: number) => x0 + ((clamp(p, popMin, popMax) - popMin) / (popMax - popMin)) * (x1 - x0);
-  const sy = (m: number) => y0 - ((clamp(m, marMin, marMax) - marMin) / (marMax - marMin)) * (y0 - y1);
-  const mx = sx(POP_MID),
-    my = sy(MARGIN_MID);
+  const W = MATRIX.W,
+    H = MATRIX.H;
+  const x0 = X0,
+    x1 = X1,
+    y0 = Y0,
+    y1 = Y1;
+  const mx = scaleX(MATRIX.POP_MID),
+    my = scaleY(MATRIX.MARGIN_MID);
 
-  const counts = items.reduce<Record<Quad, number>>(
+  const counts = plotted.reduce<Record<Quad, number>>(
     (o, d) => {
       o[quadOf(d.popularity, d.marginPct)] += 1;
       return o;
@@ -59,10 +57,17 @@ export function MenuMatrix({ items }: { items: MenuItem[] }) {
   );
 
   // Advies: lichte het zwaarst-wegende werkpaard uit (populair, marge onder norm).
-  const plows = items
+  const plows = plotted
     .filter((d) => quadOf(d.popularity, d.marginPct) === "plow")
     .sort((a, b) => b.popularity - a.popularity);
   const focus = plows[0] ?? null;
+
+  // Label-plaatsing zonder overlap. Prioriteit: populairste eerst (krijgt de
+  // voorkeurspositie), en de hoek-labels van de kwadranten blijven vrij.
+  const points: LabelInput[] = [...plotted]
+    .sort((a, b) => b.popularity - a.popularity || b.marginPct - a.marginPct)
+    .map((d) => ({ id: d.id, cx: scaleX(d.popularity), cy: scaleY(d.marginPct), text: d.dish.split(" ")[0] }));
+  const labelById = new Map(placeLabels(points, cornerLabelBoxes()).map((p) => [p.id, p]));
 
   return (
     <div className="max-w-[920px]">
@@ -82,22 +87,34 @@ export function MenuMatrix({ items }: { items: MenuItem[] }) {
             <line x1={x0} y1={my} x2={x1} y2={my} stroke={LINE} strokeDasharray="4 4" />
             <line x1={x0} y1={y0} x2={x1} y2={y0} stroke={MUTED} strokeWidth="1" />
             <line x1={x0} y1={y1} x2={x0} y2={y0} stroke={MUTED} strokeWidth="1" />
-            <text x={x0 + 8} y={y1 + 16} fontSize="11" fontWeight="700" fill={COL.puzzle}>PUZZELS</text>
-            <text x={x1 - 8} y={y1 + 16} fontSize="11" fontWeight="700" fill={COL.star} textAnchor="end">STERREN</text>
-            <text x={x0 + 8} y={y0 - 8} fontSize="11" fontWeight="700" fill={COL.dog}>HONDEN</text>
-            <text x={x1 - 8} y={y0 - 8} fontSize="11" fontWeight="700" fill={COL.plow} textAnchor="end">WERKPAARDEN</text>
+            <text x={x0 + 8} y={y1 + 16} fontSize="11" fontWeight="700" fill={COL.puzzle}>SLEEPERS</text>
+            <text x={x1 - 8} y={y1 + 16} fontSize="11" fontWeight="700" fill={COL.star} textAnchor="end">WINNERS</text>
+            <text x={x0 + 8} y={y0 - 8} fontSize="11" fontWeight="700" fill={COL.dog}>LOSERS</text>
+            <text x={x1 - 8} y={y0 - 8} fontSize="11" fontWeight="700" fill={COL.plow} textAnchor="end">RUNNERS</text>
             <text x={(x0 + x1) / 2} y={H - 8} fontSize="11" fill={MUTED} textAnchor="middle">Populariteit · couverts p/m →</text>
             <text x={14} y={(y0 + y1) / 2} fontSize="11" fill={MUTED} textAnchor="middle" transform={`rotate(-90 14 ${(y0 + y1) / 2})`}>
               Marge % ↑
             </text>
-            {items.map((d) => {
+            {plotted.map((d) => {
               const q = quadOf(d.popularity, d.marginPct);
+              const cx = scaleX(d.popularity);
+              const cy = scaleY(d.marginPct);
+              const label = labelById.get(d.id);
               return (
                 <g key={d.id} className="cursor-pointer" onClick={() => router.push(`/lab?recipe=${d.id}`)}>
-                  <circle cx={sx(d.popularity)} cy={sy(d.marginPct)} r="8" fill={COL[q]} stroke="#FFF" strokeWidth="2" />
-                  <text x={sx(d.popularity)} y={sy(d.marginPct) - 13} fontSize="10.5" fill={CHARCOAL} textAnchor="middle" fontWeight="600">
-                    {d.dish.split(" ")[0]}
-                  </text>
+                  <circle cx={cx} cy={cy} r="8" fill={COL[q]} stroke="#FFF" strokeWidth="2" />
+                  {label && (
+                    <text
+                      x={label.x}
+                      y={label.y}
+                      fontSize={label.fontSize}
+                      fill={CHARCOAL}
+                      textAnchor={label.anchor}
+                      fontWeight="600"
+                    >
+                      {label.text}
+                    </text>
+                  )}
                 </g>
               );
             })}
@@ -127,7 +144,7 @@ export function MenuMatrix({ items }: { items: MenuItem[] }) {
         <div className="text-[13.5px] leading-relaxed text-ink">
           {focus ? (
             <>
-              <strong>{focus.dish}</strong> staat op {pct(focus.marginPct)} marge en valt in de werkpaarden — populair,
+              <strong>{focus.dish}</strong> staat op {pct(focus.marginPct)} marge en valt in de Runners — populair,
               maar de marge lekt. Vraag Chef Auguste om een goedkopere variant of bescherm de marge via de Waakhond.
             </>
           ) : (
