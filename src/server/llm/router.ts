@@ -3,6 +3,7 @@ import { llmConfig, modelForTier, hasApiKey, type Tier } from "./config";
 import type { LlmAdapter, LlmRequest, LlmResponse } from "./types";
 import { MockAdapter } from "./mock-adapter";
 import { AnthropicAdapter } from "./anthropic-adapter";
+import { logLlmUsage } from "./usage";
 
 // Server-side Intelligent Router.
 //  - Modelkeuze per taak (Tier 1 goedkoop/volume, Tier 2 advies/tool-use).
@@ -29,7 +30,7 @@ export class IntelligentRouter {
   async run(
     tier: Tier,
     req: Omit<LlmRequest, "model">,
-    opts: { locationId: string },
+    opts: { locationId: string; action?: string },
   ): Promise<LlmResponse> {
     this.enforceRateLimit(opts.locationId);
     const model = modelForTier(tier);
@@ -39,15 +40,16 @@ export class IntelligentRouter {
       const key = this.cacheKey(fullReq);
       const cached = this.getCached(key);
       if (cached) {
+        // Cache-hit = geen API-aanroep, dus geen kosten en geen usage-log.
         this.log(tier, model, 0, true, opts.locationId);
         return cached;
       }
-      const res = await this.timed(tier, model, opts.locationId, fullReq);
+      const res = await this.timed(tier, model, opts.locationId, fullReq, opts.action);
       this.setCached(key, res);
       return res;
     }
 
-    return this.timed(tier, model, opts.locationId, fullReq);
+    return this.timed(tier, model, opts.locationId, fullReq, opts.action);
   }
 
   /**
@@ -58,7 +60,7 @@ export class IntelligentRouter {
   async runStream(
     tier: Tier,
     req: Omit<LlmRequest, "model">,
-    opts: { locationId: string },
+    opts: { locationId: string; action?: string },
     onText: (delta: string) => void,
   ): Promise<LlmResponse> {
     this.enforceRateLimit(opts.locationId);
@@ -77,6 +79,7 @@ export class IntelligentRouter {
       if (text) onText(text);
     }
     this.log(tier, model, Date.now() - start, false, opts.locationId);
+    await this.recordUsage(tier, model, opts.locationId, opts.action, res);
     return res;
   }
 
@@ -85,11 +88,20 @@ export class IntelligentRouter {
     model: string,
     locationId: string,
     req: LlmRequest,
+    action?: string,
   ): Promise<LlmResponse> {
     const start = Date.now();
     const res = await this.adapter.createMessage(req);
     this.log(tier, model, Date.now() - start, false, locationId);
+    await this.recordUsage(tier, model, locationId, action, res);
     return res;
+  }
+
+  // Persisteert het tokenverbruik als de adapter usage teruggaf (echte API-call).
+  // logLlmUsage vangt fouten zelf op — dit kan de hoofdflow niet breken.
+  private async recordUsage(tier: Tier, model: string, locationId: string, action: string | undefined, res: LlmResponse) {
+    if (!res.usage) return;
+    await logLlmUsage({ locationId, model, tier, action: action ?? tier, usage: res.usage });
   }
 
   // --- Rate-limiting (sliding window van 60s per locatie) ---

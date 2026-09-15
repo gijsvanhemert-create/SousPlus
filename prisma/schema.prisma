@@ -203,6 +203,23 @@ model IngredientPrice {
   @@index([catalogItemId])
 }
 
+// Append-only telemetrie van AI-verbruik per aanroep, zodat we tijdens de pilot
+// echte tokenkosten per locatie kunnen zien i.p.v. te schatten. Bewust GEEN
+// FK-relatie naar Location: dit is losstaande telemetrie die de hoofdflow nooit
+// mag blokkeren (ook niet bij een verlopen/onbekende locationId).
+model LlmUsageLog {
+  id           String   @id @default(cuid())
+  locationId   String
+  model        String // bv. "claude-sonnet-4-6"
+  tier         String // "tier1" | "tier2"
+  action       String // "chef" | "ocr:text" | "ocr:image" | "ocr:pdf"
+  inputTokens  Int
+  outputTokens Int
+  createdAt    DateTime @default(now())
+
+  @@index([locationId, createdAt])
+}
+
 // ---------------------------------------------------------------------------
 // HACCP — append-only, tamper-evident
 // ---------------------------------------------------------------------------
