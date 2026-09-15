@@ -161,7 +161,7 @@ export async function scanInvoice(source: InvoiceSource, locationId: string): Pr
       // krijgt de ruimste limiet; een enkele foto minder, tekst het minst.
       maxTokens: source.kind === "text" ? 1200 : source.kind === "pdf" ? 4096 : 2048,
     },
-    { locationId },
+    { locationId, action: `ocr:${source.kind}` },
   );
 
   return parseAndMatch(extractJsonText(res), locationId);

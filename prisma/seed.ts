@@ -169,6 +169,9 @@ async function main() {
   // wijzen. Verwijder daarom eerst álle component-koppelingen, dan pas de rest.
   await prisma.recipeComponent.deleteMany({});
   await prisma.organization.deleteMany({});
+  // LlmUsageLog heeft geen FK naar Location (losstaande telemetrie), dus valt niet
+  // onder de org-cascade — apart opruimen zodat de seed idempotent blijft.
+  await prisma.llmUsageLog.deleteMany({});
 
   const org = await prisma.organization.create({ data: { name: "Bistro+ Holding" } });
   const location = await prisma.location.create({

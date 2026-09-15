@@ -47,5 +47,10 @@ function toLlmResponse(msg: Anthropic.Message): LlmResponse {
     else if (block.type === "tool_use")
       content.push({ type: "tool_use", id: block.id, name: block.name, input: block.input });
   }
-  return { content, stopReason: msg.stop_reason ?? "end_turn" };
+  return {
+    content,
+    stopReason: msg.stop_reason ?? "end_turn",
+    // Niet-gecachte input + output (bij deze app zonder prompt-caching = de volledige input).
+    usage: msg.usage ? { inputTokens: msg.usage.input_tokens, outputTokens: msg.usage.output_tokens } : undefined,
+  };
 }

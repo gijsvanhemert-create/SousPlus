@@ -203,9 +203,9 @@ export async function runChefTurn(params: {
       if (params.onText) {
         // Scheid opeenvolgende rondes (bv. "ik zoek…" gevolgd door het antwoord).
         if (rounds > 1) params.onText("\n\n");
-        return router.runStream("tier2", req, { locationId: params.locationId }, params.onText);
+        return router.runStream("tier2", req, { locationId: params.locationId, action: "chef" }, params.onText);
       }
-      return router.run("tier2", req, { locationId: params.locationId });
+      return router.run("tier2", req, { locationId: params.locationId, action: "chef" });
     },
     validate: (name, input): Validation => {
       const tool = TOOL_BY_NAME.get(name);

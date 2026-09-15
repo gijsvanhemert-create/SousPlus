@@ -52,9 +52,14 @@ export type LlmRequest = {
 
 export type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | string;
 
+/** Tokenverbruik van één aanroep (voor kosten-telemetrie). */
+export type LlmUsage = { inputTokens: number; outputTokens: number };
+
 export type LlmResponse = {
   content: AssistantBlock[];
   stopReason: StopReason;
+  /** Aanwezig bij de echte adapter; de mock laat dit weg (geen echte kosten). */
+  usage?: LlmUsage;
 };
 
 export interface LlmAdapter {
