@@ -7,11 +7,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 type VersionRow = { id: string; recipeId: string; locationId: string; name: string; note: string | null; prepTimeMin: number; steps: string[] };
 type RecipeRow = { id: string; locationId: string; dish: string; menuPrice: string };
+type CatalogRow = { locationId: string; name: string; category: string; supplier: string; unit: string; price: string };
 
 const { store, mocks } = vi.hoisted(() => {
   const store = {
     versions: [] as VersionRow[],
     recipes: [] as RecipeRow[],
+    catalog: [] as CatalogRow[],
   };
   const mocks = {
     versionUpdate: vi.fn(),
@@ -43,6 +45,13 @@ vi.mock("@/server/db", () => ({
         return r;
       }),
     },
+    catalogItem: {
+      // Alleen locationId-scoping is relevant voor deze test; de where-filters
+      // op naam/categorie doen we bewust simpel na.
+      findMany: vi.fn(async ({ where, take }: { where: { locationId: string }; take?: number }) => {
+        return store.catalog.filter((c) => c.locationId === where.locationId).slice(0, take);
+      }),
+    },
   },
 }));
 
@@ -57,6 +66,9 @@ beforeEach(() => {
     { id: "ver_salmon_v12", recipeId: "rec_salmon", locationId: LOC_A, name: "Witte Miso", note: null, prepTimeMin: 20, steps: [] },
   ];
   store.recipes = [{ id: "rec_salmon", locationId: LOC_A, dish: "Miso-Glazed Salmon", menuPrice: "28.00" }];
+  store.catalog = [
+    { locationId: LOC_A, name: "Rode biet", category: "Groente", supplier: "HANOS", unit: "kg", price: "1.85" },
+  ];
   mocks.versionUpdate.mockClear();
   mocks.recipeUpdate.mockClear();
 });
@@ -83,5 +95,22 @@ describe("update_recipe_version.execute", () => {
     ).rejects.toThrow(/niet gevonden/i);
     expect(mocks.versionUpdate).not.toHaveBeenCalled();
     expect(mocks.recipeUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("search_ingredients.execute", () => {
+  const tool = TOOL_BY_NAME.get("search_ingredients")!;
+
+  it("levert de catalogus-treffers als JSON aan het model (interne werking intact)", async () => {
+    const outcome = await tool.execute({ query: "biet" }, { locationId: LOC_A, userId: "u1" });
+
+    const payload = JSON.parse(outcome.text) as { count: number; items: { name: string; price: number }[] };
+    expect(payload.count).toBe(1);
+    expect(payload.items[0]).toMatchObject({ name: "Rode biet", price: 1.85 });
+  });
+
+  it("toont GEEN UI-chip meer ('… artikelen gevonden' was debug-info)", async () => {
+    const outcome = await tool.execute({ query: "biet" }, { locationId: LOC_A, userId: "u1" });
+    expect(outcome.action).toBeUndefined();
   });
 });

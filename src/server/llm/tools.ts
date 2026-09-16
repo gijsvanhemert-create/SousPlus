@@ -20,7 +20,7 @@ import type { ToolSchema } from "./types";
 export type ToolContext = { locationId: string; userId: string };
 
 export type ChefAction = {
-  kind: "recipe" | "haccp" | "supplier" | "navigate" | "search";
+  kind: "recipe" | "haccp" | "supplier" | "navigate";
   label: string;
   detail?: string;
   href?: string;
@@ -146,9 +146,11 @@ const searchTool: ChefTool = {
       unit: i.unit,
       price: Number(i.price),
     }));
+    // Alleen de tekst (JSON) gaat terug naar het model; er wordt bewust geen
+    // UI-chip getoond — het aantal treffers is interne debug-info, geen
+    // gebruikersgerichte actie.
     return {
       text: JSON.stringify({ count: mapped.length, items: mapped }),
-      action: { kind: "search", label: `${mapped.length} artikelen gevonden`, detail: query },
     };
   },
 };
