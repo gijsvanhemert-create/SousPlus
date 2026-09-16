@@ -1,5 +1,6 @@
 import { prisma } from "@/server/db";
 import { getVersionCostMap } from "@/server/recipe-cost-graph";
+import { getOpenAlerts } from "@/server/watchdog";
 import type { VersionCost } from "@/lib/component-cost";
 import { FLAVOR_DB } from "@/lib/flavor-data";
 import { getRouter } from "./router";
@@ -61,7 +62,7 @@ export function buildMenuContext(recipes: CtxRecipe[], costByVersion: Map<string
 }
 
 async function buildContext(locationId: string) {
-  const [recipes, catalogCount, checkpoints, costMap] = await Promise.all([
+  const [recipes, catalogCount, checkpoints, costMap, alerts] = await Promise.all([
     prisma.recipe.findMany({
       // Sub-recepten (alleen-component) horen niet in het menu-overzicht dat
       // Auguste ziet; ze zijn alleen relevant als component van een gerecht.
@@ -80,6 +81,10 @@ async function buildContext(locationId: string) {
     // Component-inclusieve kosten voor de HELE locatie (ook de versies van
     // componenten, die niet in het gefilterde menu zitten).
     getVersionCostMap(locationId),
+    // Openstaande Marge-Waakhond-alerts: zo weet Auguste welk gerecht/ingrediënt
+    // onder druk staat én heeft hij het alertId om resolve_margin_alert te kunnen
+    // aanroepen wanneer de gebruiker om advies vraagt.
+    getOpenAlerts(locationId),
   ]);
 
   return {
@@ -88,6 +93,7 @@ async function buildContext(locationId: string) {
     haccp: checkpoints,
     menu: buildMenuContext(recipes, costMap),
     flavor: buildFlavorContext(),
+    alerts,
   };
 }
 
@@ -118,6 +124,7 @@ function buildSystem(context: unknown): string {
     "Elk gerecht in de APP-CONTEXT heeft een recipeId, een activeVersion met een id, en een lijst versions met per versie een id + label. Gebruik ALTIJD deze echte id's uit de context — verzin of gok NOOIT een id. Voor update_recipe_version geef je id = het versie-id mee (meestal activeVersion.id, of het bijpassende id uit versions). Voor een nieuwe versie van een BESTAAND recept geef je recipeId mee aan save_recipe_version. " +
     "Componenten/sub-recepten: als er expliciet om een component of sub-recept (bv. een saus) VOOR een bestaand gerecht wordt gevraagd, maak je het recept met save_recipe_version en geef je asComponentOf.parentRecipeId mee (= recipeId van het ouderrecept) — dan wordt het meteen gekoppeld. Bestaat het te koppelen recept al, gebruik dan link_component met parentRecipeId + childRecipeId in plaats van een nieuw recept te maken. Koppelen vraagt eerst een bevestiging; als het koppelen faalt (bijvoorbeeld door de cyclus- of dieptecheck), meld dat dan eerlijk en doe niet alsof het gelukt is. " +
     "Als een tool een fout teruggeeft, presenteer je het resultaat NOOIT alsof het gelukt is: meld eerlijk en beknopt dat het niet lukte. Cijfers als marge en foodcost baseer je uitsluitend op de APP-CONTEXT (huidige staat); een uitkomst ná een wijziging die niet is opgeslagen noem je expliciet 'verwacht/na aanpassing', nooit als vaststaand feit. " +
+    "Marge-Waakhond: de APP-CONTEXT bevat onder 'alerts' de openstaande marge-waarschuwingen (elk met id, ingredient, dish, affectedRecipeId, deltaPct, currentMarginPct). Vraagt de gebruiker om mee te denken over zo'n alert, geef dan NIET klakkeloos 'wissel van leverancier', maar draag 2 à 3 concrete, onderbouwde opties aan — bijvoorbeeld een goedkoper alternatief of substituut-ingrediënt (gebruik search_ingredients voor échte catalogusprijzen), een aangepaste portie, een menuprijs­aanpassing, of een combinatie — met per optie het effect op de marge. Voer een gekozen aanpak zelf uit via de juiste tool (switch_supplier, of update_recipe_version voor portie/menuprijs) en sluit de alert daarna af met resolve_margin_alert (alertId uit de context + een korte omschrijving van de aanpak). Sluit een alert nooit ongevraagd: doe het pas als de gebruiker een richting heeft gekozen. " +
     "Bij vragen over smaakcombinaties/pairings: de APP-CONTEXT bevat onder 'flavor' een GECUREERDE affinity-set (flavor.curatedIngredients + flavor.pairings), nu beperkt tot enkele basisingrediënten. Zit het gevraagde ingrediënt in die set, dan mag je een concrete match presenteren als 'affinity-score X uit onze data'. Zit het ingrediënt of de combinatie er NIET in (bv. eendenlever, miso als basis, en de meeste andere), zeg dan NOOIT dat je het niet weet en verzin NOOIT een exacte score: gebruik je eigen brede culinaire kennis als AI om onderbouwd te adviseren — welke smaken, texturen en bereidingen samengaan en waarom — en frame dat expliciet als culinair inzicht ('op basis van culinaire ervaring'), niet als een geverifieerd datapunt. Maak het onderscheid tussen beide bronnen in je antwoord altijd duidelijk. De gecureerde set is een tussenstap; de bredere Foodpairing®-koppeling volgt in fase 2. " +
     "APP-CONTEXT (JSON):\n" +
     JSON.stringify(context)

@@ -106,16 +106,28 @@ export async function getOpenAlerts(locationId: string): Promise<AlertView[]> {
   });
 }
 
-export type ResolveAction = "switch" | "accept";
+// "switch"/"accept" = de twee snelle acties uit het bel-paneel; "advise" = de
+// alert sluiten met een vrije toelichting (de door Chef Auguste gekozen aanpak,
+// bv. een portie- of prijsaanpassing die hij zelf via de andere tools uitvoerde).
+export type ResolveAction = "switch" | "accept" | "advise";
 
 export async function resolveAlert(
   locationId: string,
   alertId: string,
   action: ResolveAction,
+  note?: string,
 ): Promise<{ message: string }> {
   const alert = await prisma.marginAlert.findFirst({ where: { id: alertId, locationId } });
   if (!alert) throw new Error("Waarschuwing niet gevonden in deze locatie.");
   if (alert.resolved) return { message: "Deze waarschuwing is al opgelost." };
+
+  // advise: geen prijs-/leverancierslogica hier — Chef Auguste heeft de concrete
+  // wijziging al via de juiste tool doorgevoerd; we leggen enkel zijn aanpak vast.
+  if (action === "advise") {
+    const resolution = note?.trim() ? `Advies Chef Auguste — ${note.trim()}` : "Opgelost via Chef Auguste";
+    await prisma.marginAlert.update({ where: { id: alertId }, data: { resolved: true, resolution } });
+    return { message: resolution };
+  }
 
   if (action === "switch") {
     const res = await switchSupplierFor(locationId, primaryKeyword(alert.ingredient));

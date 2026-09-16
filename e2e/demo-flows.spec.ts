@@ -167,8 +167,17 @@ test("Marge-Waakhond: een factuur-OCR-prijsupdate triggert een alert en herstelt
   const bell = page.getByRole("button", { name: "Marge-Waakhond" });
   await expect(bell).toContainText("1", { timeout: 30_000 });
 
+  // Entry point naar Chef Auguste: de knop zet de situatie klaar als vraag en
+  // springt naar de chat, waar hij automatisch wordt verstuurd (en geëchood).
   await bell.click();
   await expect(page.getByText(/onder de kritieke grens/)).toBeVisible();
+  await page.getByRole("button", { name: /Vraag Chef Auguste om advies/ }).click();
+  await page.waitForURL("**/chef");
+  await expect(page.getByText(/De Marge-Waakhond slaat alarm/).first()).toBeVisible({ timeout: 15_000 });
+
+  // De alert staat nog open (Auguste lost pas op na bevestiging). Herstel via de
+  // snelle actie "leverancier wisselen" — de bel zit ook in de chat-header.
+  await bell.click();
   await page.getByRole("button", { name: "Wissel leverancier" }).click();
 
   // Na herstel is er geen actieve waarschuwing meer.

@@ -3,6 +3,7 @@ import { prisma } from "@/server/db";
 import { CostMode } from "@/generated/prisma/enums";
 import { appendRecord } from "@/server/haccp/records";
 import { switchSupplierFor } from "@/server/supplier-switch";
+import { resolveAlert } from "@/server/watchdog";
 import { linkComponent, activeVersionIdOf } from "@/server/components";
 import { normalizeWeightUnit } from "@/lib/units";
 import type { ToolSchema } from "./types";
@@ -20,7 +21,7 @@ import type { ToolSchema } from "./types";
 export type ToolContext = { locationId: string; userId: string };
 
 export type ChefAction = {
-  kind: "recipe" | "haccp" | "supplier" | "navigate";
+  kind: "recipe" | "haccp" | "supplier" | "navigate" | "watchdog";
   label: string;
   detail?: string;
   href?: string;
@@ -577,6 +578,40 @@ const navigateTool: ChefTool = {
   },
 };
 
+// --- resolve_margin_alert (sluit een Waakhond-alert ⇒ bevestiging) -----------
+
+const resolveAlertZod = z.object({
+  alertId: z.string().min(1),
+  resolution: z.string().min(1).max(400),
+});
+
+const resolveAlertTool: ChefTool = {
+  name: "resolve_margin_alert",
+  description:
+    "Sluit een Marge-Waakhond-alert af met je gekozen aanpak als vrije toelichting. Gebruik het echte alertId uit de APP-CONTEXT (alerts[].id). Dit markeert de alert als opgelost en legt je aanpak vast — het voert zélf géén prijs- of leverancierswijziging door. Voer de concrete wijziging daarom EERST uit via de juiste tool (switch_supplier voor een leverancierswissel, update_recipe_version voor een portie- of menuprijs­aanpassing) en sluit daarna pas de alert. Gebruik dit alleen als de gebruiker een aanpak heeft gekozen.",
+  input_schema: {
+    type: "object",
+    properties: {
+      alertId: { type: "string", description: "Het id van de alert uit APP-CONTEXT alerts[].id." },
+      resolution: {
+        type: "string",
+        description: "Korte omschrijving van de gekozen oplossing, bv. 'Portie roomboter naar 45g en menuprijs +€1,00'.",
+      },
+    },
+    required: ["alertId", "resolution"],
+  },
+  zod: resolveAlertZod,
+  confirm: true,
+  async execute(input, ctx) {
+    const { alertId, resolution } = resolveAlertZod.parse(input);
+    const res = await resolveAlert(ctx.locationId, alertId, "advise", resolution);
+    return {
+      text: res.message,
+      action: { kind: "watchdog", label: "Waakhond-alert opgelost", detail: resolution },
+    };
+  },
+};
+
 export const CHEF_TOOLS: ChefTool[] = [
   searchTool,
   saveTool,
@@ -586,6 +621,7 @@ export const CHEF_TOOLS: ChefTool[] = [
   switchTool,
   linkTool,
   navigateTool,
+  resolveAlertTool,
 ];
 
 export const TOOL_SCHEMAS: ToolSchema[] = CHEF_TOOLS.map((t) => ({

@@ -22,6 +22,10 @@ type ChefState = {
   busy: boolean;
   pending: Pending;
   loaded: boolean;
+  // Vraag die vanuit een andere module (bv. de Marge-Waakhond) is klaargezet en
+  // door de chat op mount wordt verstuurd zodra de historie geladen is.
+  pendingPrompt: string | null;
+  setPendingPrompt: (prompt: string | null) => void;
   loadHistory: () => Promise<void>;
   send: (text: string, opts?: { autoConfirm?: boolean; echo?: boolean }) => Promise<string | undefined>;
   confirm: (accept: boolean) => Promise<string | undefined>;
@@ -39,6 +43,9 @@ export const useChefStore = create<ChefState>((set, get) => ({
   busy: false,
   pending: null,
   loaded: false,
+  pendingPrompt: null,
+
+  setPendingPrompt: (prompt) => set({ pendingPrompt: prompt }),
 
   async loadHistory() {
     if (get().loaded) return;

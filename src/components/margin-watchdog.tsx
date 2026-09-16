@@ -1,18 +1,42 @@
 "use client";
 
 import { useEffect } from "react";
-import { Bell, TrendingUp, ArrowLeftRight, Check, X, Loader2, ShieldCheck } from "lucide-react";
-import { useWatchdogStore } from "@/lib/watchdog-store";
+import { useRouter } from "next/navigation";
+import { Bell, TrendingUp, ArrowLeftRight, Check, X, Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import { useWatchdogStore, type AlertView } from "@/lib/watchdog-store";
+import { useChefStore } from "@/lib/chef-store";
 import { pct } from "@/lib/format";
 
+// Vooringevulde opdracht voor Chef Auguste bij een marge-alert. Het alertId gaat
+// mee zodat hij de juiste alert kan afsluiten (resolve_margin_alert); de rest van
+// de situatie zit ook al in de APP-CONTEXT onder 'alerts'.
+function alertPrompt(a: AlertView): string {
+  const marge = a.currentMarginPct != null ? `${a.currentMarginPct.toFixed(0)}%` : "onder de norm";
+  return (
+    `De Marge-Waakhond slaat alarm: ${a.ingredient} is ${a.deltaPct.toFixed(0)}% duurder geworden, ` +
+    `waardoor de marge op ${a.dish ?? "een gerecht"} zakt tot ${marge} — onder de kritieke grens van 70%. ` +
+    `Van leverancier wisselen is hier niet per se de beste oplossing. Denk met me mee: geef een paar concrete, ` +
+    `onderbouwde opties (ander ingrediënt of substituut, aangepaste portie, prijsaanpassing, of een combinatie) ` +
+    `met per optie het effect op de marge. (alert ${a.id})`
+  );
+}
+
 export function MarginWatchdog() {
+  const router = useRouter();
   const { alerts, open, resolvingId, setOpen, refresh, resolve } = useWatchdogStore();
+  const setPendingPrompt = useChefStore((s) => s.setPendingPrompt);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const count = alerts.length;
+
+  function askAuguste(a: AlertView) {
+    setPendingPrompt(alertPrompt(a));
+    setOpen(false);
+    router.push("/chef");
+  }
 
   return (
     <div className="relative">
@@ -44,7 +68,7 @@ export function MarginWatchdog() {
               <div className="px-5 py-7 text-center text-[13px] text-muted">
                 <ShieldCheck size={22} className="mx-auto mb-2 text-success" />
                 Geen actieve waarschuwingen. Alle marges binnen norm.
-                <div className="mt-1.5 text-[12px]">Tip: draai een Re-Sync in het Supplier Portal.</div>
+                <div className="mt-1.5 text-[12px]">Scan een factuur in de OCR-module om prijzen bij te werken.</div>
               </div>
             )}
 
@@ -81,6 +105,13 @@ export function MarginWatchdog() {
                       <Check size={14} /> Prijs accepteren
                     </button>
                   </div>
+                  <button
+                    onClick={() => askAuguste(a)}
+                    disabled={busy}
+                    className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-[10px] px-3 py-1.5 text-[12px] font-semibold text-gold-deep transition hover:bg-champagne-soft disabled:opacity-60"
+                  >
+                    <Sparkles size={13} /> Vraag Chef Auguste om advies
+                  </button>
                 </div>
               );
             })}

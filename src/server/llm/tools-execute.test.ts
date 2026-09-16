@@ -8,16 +8,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 type VersionRow = { id: string; recipeId: string; locationId: string; name: string; note: string | null; prepTimeMin: number; steps: string[] };
 type RecipeRow = { id: string; locationId: string; dish: string; menuPrice: string };
 type CatalogRow = { locationId: string; name: string; category: string; supplier: string; unit: string; price: string };
+type AlertRow = { id: string; locationId: string; ingredient: string; resolved: boolean; resolution: string | null };
 
 const { store, mocks } = vi.hoisted(() => {
   const store = {
     versions: [] as VersionRow[],
     recipes: [] as RecipeRow[],
     catalog: [] as CatalogRow[],
+    alerts: [] as AlertRow[],
   };
   const mocks = {
     versionUpdate: vi.fn(),
     recipeUpdate: vi.fn(),
+    alertUpdate: vi.fn(),
   };
   return { store, mocks };
 });
@@ -52,6 +55,18 @@ vi.mock("@/server/db", () => ({
         return store.catalog.filter((c) => c.locationId === where.locationId).slice(0, take);
       }),
     },
+    marginAlert: {
+      // Tenant-scoping: id én locationId moeten matchen (zoals resolveAlert doet).
+      findFirst: vi.fn(async ({ where }: { where: { id: string; locationId: string } }) => {
+        return store.alerts.find((a) => a.id === where.id && a.locationId === where.locationId) ?? null;
+      }),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        mocks.alertUpdate({ where, data });
+        const a = store.alerts.find((x) => x.id === where.id);
+        if (a) Object.assign(a, data);
+        return a;
+      }),
+    },
   },
 }));
 
@@ -69,8 +84,12 @@ beforeEach(() => {
   store.catalog = [
     { locationId: LOC_A, name: "Rode biet", category: "Groente", supplier: "HANOS", unit: "kg", price: "1.85" },
   ];
+  store.alerts = [
+    { id: "alert_boter", locationId: LOC_A, ingredient: "Roomboter ongezouten", resolved: false, resolution: null },
+  ];
   mocks.versionUpdate.mockClear();
   mocks.recipeUpdate.mockClear();
+  mocks.alertUpdate.mockClear();
 });
 
 describe("update_recipe_version.execute", () => {
@@ -112,5 +131,42 @@ describe("search_ingredients.execute", () => {
   it("toont GEEN UI-chip meer ('… artikelen gevonden' was debug-info)", async () => {
     const outcome = await tool.execute({ query: "biet" }, { locationId: LOC_A, userId: "u1" });
     expect(outcome.action).toBeUndefined();
+  });
+});
+
+describe("resolve_margin_alert.execute", () => {
+  const tool = TOOL_BY_NAME.get("resolve_margin_alert")!;
+
+  it("is een confirm-gated tool", () => {
+    expect(tool.confirm).toBe(true);
+  });
+
+  it("sluit de alert af met de vrije advies-tekst als resolution", async () => {
+    const outcome = await tool.execute(
+      { alertId: "alert_boter", resolution: "Portie roomboter naar 45g en menuprijs +€1,00" },
+      { locationId: LOC_A, userId: "u1" },
+    );
+
+    // De alert is opgelost en de aanpak is vastgelegd (met Auguste-prefix).
+    expect(mocks.alertUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "alert_boter" },
+        data: expect.objectContaining({
+          resolved: true,
+          resolution: "Advies Chef Auguste — Portie roomboter naar 45g en menuprijs +€1,00",
+        }),
+      }),
+    );
+    expect(outcome.action).toEqual(
+      expect.objectContaining({ kind: "watchdog", label: "Waakhond-alert opgelost" }),
+    );
+    expect(store.alerts[0].resolved).toBe(true);
+  });
+
+  it("sluit een alert uit een andere locatie NIET (tenant-scoping)", async () => {
+    await expect(
+      tool.execute({ alertId: "alert_boter", resolution: "iets" }, { locationId: LOC_B, userId: "u1" }),
+    ).rejects.toThrow(/niet gevonden/i);
+    expect(mocks.alertUpdate).not.toHaveBeenCalled();
   });
 });

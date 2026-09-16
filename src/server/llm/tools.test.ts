@@ -73,9 +73,9 @@ describe("normalizeWeightUnit", () => {
 
 describe("tool-metadata", () => {
   it("levert alle tools met API-schema's", () => {
-    expect(CHEF_TOOLS).toHaveLength(8);
+    expect(CHEF_TOOLS).toHaveLength(9);
     expect(TOOL_SCHEMAS.map((t) => t.name).sort()).toEqual(
-      ["fill_haccp", "link_component", "navigate_app", "prepare_haccp", "save_recipe_version", "search_ingredients", "switch_supplier", "update_recipe_version"].sort(),
+      ["fill_haccp", "link_component", "navigate_app", "prepare_haccp", "resolve_margin_alert", "save_recipe_version", "search_ingredients", "switch_supplier", "update_recipe_version"].sort(),
     );
   });
 
@@ -83,6 +83,7 @@ describe("tool-metadata", () => {
     expect(TOOL_BY_NAME.get("update_recipe_version")?.confirm).toBe(true);
     expect(TOOL_BY_NAME.get("switch_supplier")?.confirm).toBe(true);
     expect(TOOL_BY_NAME.get("link_component")?.confirm).toBe(true);
+    expect(TOOL_BY_NAME.get("resolve_margin_alert")?.confirm).toBe(true);
     expect(TOOL_BY_NAME.get("search_ingredients")?.confirm).toBe(false);
     expect(TOOL_BY_NAME.get("save_recipe_version")?.confirm).toBe(false);
   });
