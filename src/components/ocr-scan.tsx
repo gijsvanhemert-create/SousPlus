@@ -6,11 +6,7 @@ import { eur } from "@/lib/format";
 import { scanInvoiceFileAction, applyInvoiceAction, addCatalogItemFromLineAction } from "@/server/ocr-actions";
 import { useWatchdogStore } from "@/lib/watchdog-store";
 import { parsePrice, toApplyPayload, type EditableLine } from "@/lib/ocr-apply";
-
-// Foto's worden client-side verkleind naar deze lange zijde vóór upload: kleiner
-// request én de resolutie waarop het vision-model (Haiku) optimaal leest.
-const MAX_EDGE = 1568;
-const ALLOWED = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+import { ALLOWED_UPLOAD_TYPES, fileToBase64, resizeImage } from "@/lib/image-upload";
 
 type Selected = { kind: "image" | "pdf"; mediaType: string; data: string; name: string; preview: string | null };
 // Bewerkbare regel + de UI-status voor prijs-edit en het toevoeg-formulier.
@@ -24,45 +20,6 @@ type Row = EditableLine & {
   added: null | "created" | "existing";
   addError: string | null;
 };
-
-function stripDataUrl(dataUrl: string): string {
-  return dataUrl.split(",")[1] ?? "";
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(stripDataUrl(String(r.result)));
-    r.onerror = () => reject(r.error ?? new Error("Kon bestand niet lezen"));
-    r.readAsDataURL(file);
-  });
-}
-
-// Verkleint een afbeelding via canvas en her-encodeert als JPEG (kwaliteit 0.8).
-async function resizeImage(file: File): Promise<{ data: string; preview: string }> {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i);
-      i.onerror = () => reject(new Error("Kon afbeelding niet laden"));
-      i.src = url;
-    });
-    const scale = Math.min(1, MAX_EDGE / Math.max(img.width, img.height));
-    const w = Math.max(1, Math.round(img.width * scale));
-    const h = Math.max(1, Math.round(img.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas niet beschikbaar");
-    ctx.drawImage(img, 0, 0, w, h);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-    return { data: stripDataUrl(dataUrl), preview: dataUrl };
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
 
 export function OcrScan({ categories }: { categories: string[] }) {
   const defaultCategory = categories.includes("Overig") ? "Overig" : categories[0] ?? "Overig";
@@ -90,7 +47,7 @@ export function OcrScan({ categories }: { categories: string[] }) {
     setRows([]);
     setApplied(false);
     setStage("idle");
-    if (!ALLOWED.includes(file.type)) {
+    if (!ALLOWED_UPLOAD_TYPES.includes(file.type)) {
       setSelected(null);
       setError("Alleen JPG, PNG, WebP of PDF wordt ondersteund.");
       return;

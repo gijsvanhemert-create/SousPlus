@@ -5,6 +5,7 @@ import {
   RadioTower,
   Boxes,
   ScanLine,
+  ScanText,
   ClipboardCheck,
   LayoutGrid,
   Grid2x2,
@@ -26,6 +27,7 @@ export const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { id: "chef", label: "AI Sous-Chef", icon: ChefHat, href: "/chef", phase: 4 },
       { id: "lab", label: "Recipe Lab", icon: FlaskConical, href: "/lab", phase: 3 },
+      { id: "recipe-import", label: "Recept importeren", icon: ScanText, href: "/recipe-import", phase: 6 },
       { id: "flavor", label: "Flavor Matcher", icon: Sparkles, href: "/flavor", phase: 6 },
     ],
   },
@@ -52,6 +54,7 @@ export const FLAT_NAV: NavItem[] = NAV.flatMap((g) => g.items);
 export const TITLES: Record<string, string> = {
   chef: "Chef de Cuisine",
   lab: "R&D Recipe Lab",
+  "recipe-import": "Recept importeren",
   flavor: "Moleculaire Smaakanalyse",
   supplier: "Leveranciers in realtime",
   ocr: "Factuurverwerking (OCR)",
