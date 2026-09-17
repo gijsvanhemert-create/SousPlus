@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Decimal } from "decimal.js";
-import { computeVersionCosts, unitCostFor, MAX_COMPONENT_DEPTH, type CostVersionNode } from "@/lib/component-cost";
+import { computeVersionCosts, unitCostFor, isVersionPriceComplete, MAX_COMPONENT_DEPTH, type CostVersionNode } from "@/lib/component-cost";
 
 function expectDecimal(actual: Decimal | undefined, expected: string) {
   expect(actual?.toString()).toBe(new Decimal(expected).toString());
@@ -110,5 +110,48 @@ describe("computeVersionCosts", () => {
     const costs = computeVersionCosts([pepersaus]);
     expectDecimal(unitCostFor(costs, "ver_saus"), "0.024");
     expectDecimal(unitCostFor(costs, "bestaat-niet"), "0");
+  });
+});
+
+describe("prijs-onbekend propagatie (priceComplete)", () => {
+  // Saus met één ongeprijsd ingrediënt (pricePerUnit null) naast een geprijsd.
+  const sausOnbekend: CostVersionNode = {
+    id: "ver_saus_x",
+    yieldQty: 50,
+    ingredients: [
+      { name: "Peperkorrels", amount: 100, mode: "WEIGHT", pricePerUnit: "12.00" }, // 1,20
+      { name: "Wilde tijm (nieuw)", amount: 5, mode: "WEIGHT", pricePerUnit: null }, // onbekend
+    ],
+    components: [],
+  };
+
+  it("markeert een versie met een ongeprijsd ingrediënt als niet-compleet", () => {
+    const costs = computeVersionCosts([sausOnbekend]);
+    expect(costs.get("ver_saus_x")?.priceComplete).toBe(false);
+    // De ongeprijsde regel draagt 0 bij → het getal is PARTIEEL, niet te vertrouwen.
+    expectDecimal(costs.get("ver_saus_x")?.foodcostPerServing, "1.2");
+    expect(isVersionPriceComplete(costs, "ver_saus_x")).toBe(false);
+  });
+
+  it("propageert onvolledigheid transitief naar de parent (component zonder prijs)", () => {
+    const parent: CostVersionNode = {
+      id: "ver_parent",
+      yieldQty: 1,
+      ingredients: [{ name: "Biefstuk", amount: 200, mode: "WEIGHT", pricePerUnit: "30.00" }],
+      components: [{ childVersionId: "ver_saus_x", amount: 50 }],
+    };
+    const costs = computeVersionCosts([sausOnbekend, parent]);
+    // De parent heeft zelf alleen geprijsde ingrediënten, maar erft de
+    // onvolledigheid van de sub-component.
+    expect(costs.get("ver_parent")?.priceComplete).toBe(false);
+    expect(isVersionPriceComplete(costs, "ver_parent")).toBe(false);
+  });
+
+  it("een volledig geprijsde graaf blijft compleet", () => {
+    const costs = computeVersionCosts([pepersaus]);
+    expect(costs.get("ver_saus")?.priceComplete).toBe(true);
+    expect(isVersionPriceComplete(costs, "ver_saus")).toBe(true);
+    // Onbekende versie → geen prijsprobleem, geldt als compleet.
+    expect(isVersionPriceComplete(costs, "bestaat-niet")).toBe(true);
   });
 });

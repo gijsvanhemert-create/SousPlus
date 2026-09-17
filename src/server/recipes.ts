@@ -54,7 +54,7 @@ export async function getLabRecipes(locationId: string): Promise<LabRecipe[]> {
         amount: i.amount.toString(),
         unit: i.unit,
         mode: i.mode as CostMode,
-        pricePerUnit: i.pricePerUnit.toString(),
+        pricePerUnit: i.pricePerUnit === null ? null : i.pricePerUnit.toString(),
       })),
       components: v.components.map((c) => ({
         id: c.id,

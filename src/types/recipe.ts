@@ -10,7 +10,7 @@ export type LabIngredient = {
   amount: string; // Decimal als string (gram/ml of aantal)
   unit: string;
   mode: CostMode;
-  pricePerUnit: string; // Decimal als string (per kg/L of per eenheid)
+  pricePerUnit: string | null; // Decimal als string (per kg/L of per eenheid); null = prijs onbekend
 };
 
 // Een component/sub-recept dat een parent-versie gebruikt. Gepind op een vaste

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChefHat, Send, Sparkles, Check, X, Loader2, ArrowRight } from "lucide-react";
 import { useChefStore } from "@/lib/chef-store";
+import { useWatchdogStore } from "@/lib/watchdog-store";
 import { ChefMarkdown } from "@/components/chef-markdown";
 
 const TASKS = [
@@ -15,9 +16,11 @@ const TASKS = [
 
 export function ChefAuguste() {
   const router = useRouter();
-  const { messages, busy, pending, loaded, loadHistory, send, confirm } = useChefStore();
+  const { messages, busy, pending, loaded, pendingPrompt, setPendingPrompt, loadHistory, send, confirm } = useChefStore();
   const [input, setInput] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
+  const lastConsumedRef = useRef<string | null>(null);
+  const watchdogCountRef = useRef(0);
 
   useEffect(() => {
     void loadHistory();
@@ -26,6 +29,32 @@ export function ChefAuguste() {
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [messages, busy, pending]);
+
+  // Vraag die een andere module (bv. de Marge-Waakhond) heeft klaargezet: pas
+  // versturen zodra de historie geladen is, en elke prompt hooguit één keer.
+  useEffect(() => {
+    if (!loaded || !pendingPrompt || busy) return;
+    if (lastConsumedRef.current === pendingPrompt) return;
+    lastConsumedRef.current = pendingPrompt;
+    const prompt = pendingPrompt;
+    setPendingPrompt(null);
+    void (async () => {
+      setInput("");
+      const navigateTo = await send(prompt);
+      if (navigateTo) router.push(navigateTo);
+    })();
+  }, [loaded, pendingPrompt, busy, send, setPendingPrompt, router]);
+
+  // Zodra Auguste een Waakhond-alert oplost (nieuwe 'watchdog'-actie), ververs de
+  // bel zodat de teller direct klopt.
+  useEffect(() => {
+    const count = messages.reduce(
+      (n, m) => n + (m.actions?.filter((a) => a.kind === "watchdog").length ?? 0),
+      0,
+    );
+    if (count > watchdogCountRef.current) void useWatchdogStore.getState().refresh();
+    watchdogCountRef.current = count;
+  }, [messages]);
 
   async function submit(text: string) {
     if (!text.trim() || busy) return;

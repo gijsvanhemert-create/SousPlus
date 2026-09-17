@@ -19,12 +19,13 @@ import {
   Loader2,
   ChefHat,
   BadgeCheck,
+  AlertTriangle,
 } from "lucide-react";
 import { Decimal } from "decimal.js";
 import { eur, pct } from "@/lib/format";
 import { ingredientCost, recipeFoodcost } from "@/lib/cost";
-import { computeVersionCosts, unitCostFor, type CostVersionNode } from "@/lib/component-cost";
-import { marginTextClass, marginApplies } from "@/lib/margin";
+import { computeVersionCosts, unitCostFor, isVersionPriceComplete, type CostVersionNode } from "@/lib/component-cost";
+import { marginTextClass, marginApplies, unpricedNames } from "@/lib/margin";
 import type { LabRecipe, LabVersion, CatalogResult, CandidateRecipe } from "@/types/recipe";
 import {
   updateIngredientAmount,
@@ -37,6 +38,7 @@ import {
   removeComponent,
   repointComponentToActive,
   searchRecipesForComponent,
+  priceIngredientToCatalog,
 } from "@/server/recipe-actions";
 import { setComponentOnly } from "@/server/menu-actions";
 
@@ -66,9 +68,11 @@ function fmtTotal(amount: string, covers: number, unit: string, isPiece: boolean
 
 export function RecipeLab({
   recipes: initialRecipes,
+  categories,
   initialRecipeId,
 }: {
   recipes: LabRecipe[];
+  categories: string[];
   initialRecipeId?: string;
 }) {
   // Lokale werkkopie, geseed uit props — instant herberekening bij het bewerken
@@ -94,6 +98,45 @@ export function RecipeLab({
   const [compPicker, setCompPicker] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Inline "prijs invullen" voor een ongeprijsd ingrediënt (fase 4).
+  const defaultCategory = categories.includes("Overig") ? "Overig" : categories[0] ?? "Overig";
+  const [pricingId, setPricingId] = useState<string | null>(null);
+  const [priceInput, setPriceInput] = useState("");
+  const [priceCategory, setPriceCategory] = useState(defaultCategory);
+  const [priceSupplier, setPriceSupplier] = useState<"HANOS" | "SLIGRO" | "BEIDE">("BEIDE");
+  const [pricingError, setPricingError] = useState<string | null>(null);
+
+  function openPricing(ingId: string) {
+    setPricingId(ingId);
+    setPriceInput("");
+    setPriceCategory(defaultCategory);
+    setPriceSupplier("BEIDE");
+    setPricingError(null);
+  }
+
+  function submitPricing(ingId: string) {
+    setPricingError(null);
+    startTransition(async () => {
+      const res = await priceIngredientToCatalog({
+        ingredientId: ingId,
+        price: priceInput,
+        category: priceCategory,
+        supplier: priceSupplier,
+      });
+      if (!res.ok) {
+        setPricingError(res.error);
+        return;
+      }
+      // De prop-sync na revalidatePath werkt de ingrediëntprijs bij; sluit het formulier.
+      setPricingId(null);
+      setToast(
+        res.created
+          ? `${res.name} toegevoegd aan de catalogus en geprijsd.`
+          : `${res.name} gekoppeld aan de catalogus (prijs €${res.price.replace(".", ",")}).`,
+      );
+    });
+  }
 
   // Toast automatisch laten verdwijnen.
   useEffect(() => {
@@ -142,19 +185,39 @@ export function RecipeLab({
         mode: i.mode,
         pricePerUnit: i.pricePerUnit,
       })),
-      // Componenten tellen mee via hun (recursief bepaalde) kost per eenheid.
+      // Componenten tellen mee via hun (recursief bepaalde) kost per eenheid;
+      // een prijs-onvolledige component geeft unitCost null → propageert.
       components: version.components.map((c) => ({
         amount: sanitize(c.amount),
-        unitCost: unitCostFor(versionCosts, c.childVersionId),
+        unitCost: isVersionPriceComplete(versionCosts, c.childVersionId)
+          ? unitCostFor(versionCosts, c.childVersionId)
+          : null,
       })),
     });
+    // foodcost null = één of meer ingrediënten zonder bekende prijs → foodcost en
+    // marge zijn onvolledig; toon geen vals-precies getal en géén (rode) marge.
+    const complete = foodcostPerCover !== null;
     // Marge is n.v.t. voor alleen-component (sub-)recepten — ongeacht welke
     // menuPrice er toevallig is opgeslagen — en zonder positieve prijs.
     const price = new Decimal(sanitize(recipe.menuPrice));
-    const marginPct = marginApplies(recipe.componentOnly, price.toNumber())
-      ? price.sub(foodcostPerCover).div(price).mul(100)
-      : null;
-    return { foodcostPerCover, foodcostTotal: foodcostPerCover.mul(covers), marginPct };
+    const marginPct =
+      complete && marginApplies(recipe.componentOnly, price.toNumber())
+        ? price.sub(foodcostPerCover).div(price).mul(100)
+        : null;
+    // Welke ingrediënten/sub-recepten missen een prijs — voor een expliciete
+    // melding (fase 3) en straks de inline-invulactie (fase 4).
+    const missingNames = unpricedNames(version.ingredients);
+    const componentIncomplete = version.components.some(
+      (c) => !isVersionPriceComplete(versionCosts, c.childVersionId),
+    );
+    return {
+      foodcostPerCover,
+      foodcostTotal: complete ? foodcostPerCover.mul(covers) : null,
+      marginPct,
+      complete,
+      missingNames,
+      componentIncomplete,
+    };
   }, [recipe, version, covers, versionCosts]);
 
   if (!recipe || !version || !costing) {
@@ -398,12 +461,16 @@ export function RecipeLab({
       >
         <StatChip label="Prep tijd" value={`${version.prepTimeMin} min`} />
         {!kitchenView && (
-          <StatChip label="Foodcost p.c." value={eur(costing.foodcostPerCover.toNumber())} testId="lab-foodcost" />
+          <StatChip
+            label="Foodcost p.c."
+            value={costing.complete ? eur(costing.foodcostPerCover!.toNumber()) : "onvolledig"}
+            testId="lab-foodcost"
+          />
         )}
         {!kitchenView && (
           <StatChip
             label="Marge"
-            value={marginPctNum != null ? pct(marginPctNum) : "n.v.t."}
+            value={!costing.complete ? "onvolledig" : marginPctNum != null ? pct(marginPctNum) : "n.v.t."}
             accent={marginTextClass(marginPctNum)}
             testId="lab-margin"
           />
@@ -414,6 +481,27 @@ export function RecipeLab({
       {kitchenView && (
         <div className="mb-[22px] flex items-center gap-2 rounded-xl border border-champagne bg-champagne-soft px-4 py-2.5 text-[12.5px] font-semibold text-gold-deep">
           <EyeOff size={15} /> Kitchen View actief — financiële data verborgen voor de pas.
+        </div>
+      )}
+
+      {!kitchenView && !costing.complete && (
+        <div
+          data-testid="lab-incomplete-notice"
+          className="mb-[22px] flex items-start gap-2 rounded-xl border border-champagne bg-champagne-soft px-4 py-2.5 text-[12.5px] leading-relaxed text-gold-deep"
+        >
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <div>
+            <span className="font-semibold">Onvolledige kostprijs.</span> Foodcost en marge zijn nog niet te bepalen zolang
+            een prijs ontbreekt
+            {costing.missingNames.length > 0 && (
+              <>
+                {" "}— zonder prijs:{" "}
+                <span className="font-semibold">{costing.missingNames.join(", ")}</span>
+              </>
+            )}
+            {costing.componentIncomplete && <> — en een sub-recept bevat een ongeprijsd ingrediënt</>}. Vul de inkoopprijs in
+            om de marge te berekenen.
+          </div>
         </div>
       )}
 
@@ -535,20 +623,29 @@ export function RecipeLab({
 
             {version.ingredients.map((ing) => {
               const isPiece = ing.mode === "PIECE";
-              const lineCost = ingredientCost({
+              // null = prijs onbekend → regelkost "—" i.p.v. €0,00.
+              const lineCostDec = ingredientCost({
                 amount: sanitize(ing.amount),
                 mode: ing.mode,
                 pricePerUnit: ing.pricePerUnit,
-              })
-                .mul(covers)
-                .toNumber();
+              });
+              const lineCost = lineCostDec === null ? null : lineCostDec.mul(covers).toNumber();
               const totalDisp = fmtTotal(ing.amount, covers, ing.unit, isPiece);
+              const unpriced = ing.pricePerUnit === null;
               return (
-                <div
-                  key={ing.id}
-                  className="flex items-center justify-between gap-2 border-b border-canvas py-[9px]"
-                >
-                  <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink">{ing.name}</span>
+                <div key={ing.id} className="border-b border-canvas">
+                <div className="flex items-center justify-between gap-2 py-[9px]">
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="truncate text-[13.5px] text-ink">{ing.name}</span>
+                    {!kitchenView && unpriced && (
+                      <span
+                        title="Prijs onbekend — dit ingrediënt staat nog niet in de catalogus."
+                        className="shrink-0 rounded-full bg-champagne-soft px-1.5 py-0.5 text-[10px] font-semibold text-gold-deep"
+                      >
+                        prijs onbekend
+                      </span>
+                    )}
+                  </div>
                   <div className="flex shrink-0 items-center gap-2.5">
                     {!kitchenView && (
                       <span className="flex items-center gap-1">
@@ -576,7 +673,7 @@ export function RecipeLab({
                     )}
                     {!kitchenView && (
                       <span className="w-[52px] text-right text-[12.5px] text-muted tabular-nums">
-                        {eur(lineCost)}
+                        {lineCost === null ? "—" : eur(lineCost)}
                       </span>
                     )}
                     {!kitchenView && (
@@ -589,6 +686,79 @@ export function RecipeLab({
                       </button>
                     )}
                   </div>
+                </div>
+
+                {!kitchenView && unpriced && (
+                  <div className="pb-2.5">
+                    {pricingId !== ing.id ? (
+                      <button
+                        onClick={() => openPricing(ing.id)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gold bg-champagne-soft px-2.5 py-1 text-[11.5px] font-semibold text-gold-deep transition hover:bg-champagne"
+                      >
+                        <Plus size={12} /> Prijs invullen
+                      </button>
+                    ) : (
+                      <div className="rounded-[12px] border border-champagne bg-champagne-soft/60 p-3">
+                        <div className="mb-1.5 text-[11.5px] font-semibold text-gold-deep">
+                          Prijs invullen voor “{ing.name}” — voegt het toe aan de catalogus.
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="flex items-center gap-1 rounded-lg border border-line bg-card px-2 py-1">
+                            <span className="text-[12px] text-muted">€</span>
+                            <input
+                              value={priceInput}
+                              onChange={(e) => setPriceInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") submitPricing(ing.id);
+                              }}
+                              inputMode="decimal"
+                              autoFocus
+                              placeholder={ing.mode === "PIECE" ? "per stuk" : "per kg/L"}
+                              aria-label={`prijs ${ing.name}`}
+                              className="w-[86px] bg-transparent text-[13px] text-charcoal outline-none tabular-nums"
+                            />
+                          </label>
+                          <select
+                            value={priceCategory}
+                            onChange={(e) => setPriceCategory(e.target.value)}
+                            aria-label="categorie nieuw artikel"
+                            className="rounded-lg border border-line bg-card px-2 py-1.5 text-[12.5px] text-charcoal"
+                          >
+                            {categories.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={priceSupplier}
+                            onChange={(e) => setPriceSupplier(e.target.value as "HANOS" | "SLIGRO" | "BEIDE")}
+                            aria-label="leverancier nieuw artikel"
+                            className="rounded-lg border border-line bg-card px-2 py-1.5 text-[12.5px] text-charcoal"
+                          >
+                            <option value="BEIDE">Beide</option>
+                            <option value="HANOS">Hanos</option>
+                            <option value="SLIGRO">Sligro</option>
+                          </select>
+                          <button
+                            onClick={() => submitPricing(ing.id)}
+                            disabled={isPending || priceInput.trim() === ""}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-forest bg-forest px-3 py-1.5 text-[12.5px] font-semibold text-white transition disabled:opacity-60"
+                          >
+                            {isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Toevoegen
+                          </button>
+                          <button
+                            onClick={() => setPricingId(null)}
+                            className="rounded-lg px-2 py-1.5 text-[12.5px] font-semibold text-muted transition hover:text-charcoal"
+                          >
+                            Annuleren
+                          </button>
+                        </div>
+                        {pricingError && <div className="mt-1.5 text-[11.5px] text-danger">{pricingError}</div>}
+                      </div>
+                    )}
+                  </div>
+                )}
                 </div>
               );
             })}
@@ -611,7 +781,7 @@ export function RecipeLab({
               <div className="mt-4 flex items-center justify-between border-t border-line pt-3.5">
                 <span className="text-[13px] text-muted">Totale inkoop voor {covers} covers</span>
                 <span className="font-serif text-[22px] font-semibold">
-                  {eur(costing.foodcostTotal.toNumber())}
+                  {costing.foodcostTotal === null ? "onvolledig" : eur(costing.foodcostTotal.toNumber())}
                 </span>
               </div>
             )}

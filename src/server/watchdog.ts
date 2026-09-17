@@ -30,25 +30,29 @@ async function recipeMargins(locationId: string): Promise<RecipeMargin[]> {
   });
   return recipes.map((r) => {
     const v = r.activeVersion;
-    // Alleen echte menu-gerechten met een positieve prijs hebben een zinvolle marge;
-    // sub-recepten (menuPrice 0) slaan we over (recipeCost werpt anders).
+    const ingredients =
+      v?.ingredients.map((i) => ({
+        amount: i.amount.toString(),
+        mode: i.mode as CostMode,
+        pricePerUnit: i.pricePerUnit === null ? null : i.pricePerUnit.toString(),
+      })) ?? [];
+    // Foodcost is `null` zodra een ingrediënt geen bekende prijs heeft — dan is de
+    // marge NIET te bepalen en behandelen we het recept als "onvolledig".
+    const fc = v && v.ingredients.length > 0 ? recipeFoodcost({ ingredients }) : null;
+    // Alleen echte menu-gerechten met positieve prijs én volledige foodcost hebben
+    // een zinvolle marge; sub-recepten (menuPrice 0) en ongeprijsde recepten niet.
     const cost =
-      v && v.ingredients.length > 0 && Number(r.menuPrice) > 0
-        ? recipeCost({
-            menuPrice: r.menuPrice.toString(),
-            ingredients: v.ingredients.map((i) => ({
-              amount: i.amount.toString(),
-              mode: i.mode as CostMode,
-              pricePerUnit: i.pricePerUnit.toString(),
-            })),
-          })
+      fc !== null && Number(r.menuPrice) > 0
+        ? recipeCost({ menuPrice: r.menuPrice.toString(), ingredients })
         : null;
     return {
       id: r.id,
       dish: r.dish,
       menuPrice: Number(r.menuPrice),
+      // marginPct blijft null bij een onvolledige/onbepaalbare marge → nooit
+      // vergeleken alsof het 0% of een extreme waarde is (geen valse alerts).
       marginPct: cost ? cost.marginPct.toNumber() : null,
-      foodcost: cost ? cost.foodcostPerCover.toNumber() : 0,
+      foodcost: fc ? fc.toNumber() : 0,
       ingredients: v?.ingredients.map((i) => i.name.toLowerCase()) ?? [],
     };
   });
@@ -106,16 +110,28 @@ export async function getOpenAlerts(locationId: string): Promise<AlertView[]> {
   });
 }
 
-export type ResolveAction = "switch" | "accept";
+// "switch"/"accept" = de twee snelle acties uit het bel-paneel; "advise" = de
+// alert sluiten met een vrije toelichting (de door Chef Auguste gekozen aanpak,
+// bv. een portie- of prijsaanpassing die hij zelf via de andere tools uitvoerde).
+export type ResolveAction = "switch" | "accept" | "advise";
 
 export async function resolveAlert(
   locationId: string,
   alertId: string,
   action: ResolveAction,
+  note?: string,
 ): Promise<{ message: string }> {
   const alert = await prisma.marginAlert.findFirst({ where: { id: alertId, locationId } });
   if (!alert) throw new Error("Waarschuwing niet gevonden in deze locatie.");
   if (alert.resolved) return { message: "Deze waarschuwing is al opgelost." };
+
+  // advise: geen prijs-/leverancierslogica hier — Chef Auguste heeft de concrete
+  // wijziging al via de juiste tool doorgevoerd; we leggen enkel zijn aanpak vast.
+  if (action === "advise") {
+    const resolution = note?.trim() ? `Advies Chef Auguste — ${note.trim()}` : "Opgelost via Chef Auguste";
+    await prisma.marginAlert.update({ where: { id: alertId }, data: { resolved: true, resolution } });
+    return { message: resolution };
+  }
 
   if (action === "switch") {
     const res = await switchSupplierFor(locationId, primaryKeyword(alert.ingredient));
@@ -132,15 +148,19 @@ export async function resolveAlert(
       where: { id: alert.affectedRecipeId, locationId },
       include: { activeVersion: { include: { ingredients: true } } },
     });
-    if (recipe?.activeVersion) {
-      // Alleen de foodcost nodig (geen marge) → recipeFoodcost werpt niet bij prijs 0.
-      const foodcost = recipeFoodcost({
-        ingredients: recipe.activeVersion.ingredients.map((i) => ({
-          amount: i.amount.toString(),
-          mode: i.mode as CostMode,
-          pricePerUnit: i.pricePerUnit.toString(),
-        })),
-      }).toNumber();
+    // Alleen de foodcost nodig (geen marge). `null` = een ongeprijsd ingrediënt,
+    // dan is bijstellen niet zinvol → val terug op de generieke afhandeling.
+    const foodcostDec = recipe?.activeVersion
+      ? recipeFoodcost({
+          ingredients: recipe.activeVersion.ingredients.map((i) => ({
+            amount: i.amount.toString(),
+            mode: i.mode as CostMode,
+            pricePerUnit: i.pricePerUnit === null ? null : i.pricePerUnit.toString(),
+          })),
+        })
+      : null;
+    if (recipe?.activeVersion && foodcostDec !== null) {
+      const foodcost = foodcostDec.toNumber();
       const newPrice = Math.ceil((foodcost / (1 - RESTORE_TARGET / 100)) * 100) / 100;
       await prisma.recipe.update({ where: { id: recipe.id }, data: { menuPrice: newPrice.toFixed(2) } });
       await prisma.marginAlert.update({

@@ -1,22 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { PriceChange } from "./watchdog";
 
-// Unit-test voor addCatalogItemFromLineAction: aanmaken van een nieuw artikel uit
-// een niet-gekoppelde OCR-regel, plus de dup-check die duplicaten voorkomt.
-const { db, getTenant } = vi.hoisted(() => ({
+// Unit-test voor de OCR-acties: (1) addCatalogItemFromLineAction — aanmaken van een
+// nieuw artikel uit een niet-gekoppelde OCR-regel, plus de dup-check; en (2)
+// applyInvoiceAction — het toepassen van gekoppelde factuurregels moet dezelfde
+// Marge-Waakhond (evaluateMarginAlerts) triggeren als voorheen de re-sim-feed.
+const { db, getTenant, evaluateMarginAlerts } = vi.hoisted(() => ({
   db: {
     catalogItem: {
-      findFirst: vi.fn<(args: unknown) => Promise<{ id: string; name: string } | null>>(async () => null),
+      findFirst: vi.fn<(args: unknown) => Promise<{ id: string; name: string; price?: unknown } | null>>(async () => null),
       create: vi.fn<(args: unknown) => Promise<{ id: string; name: string }>>(async () => ({ id: "new1", name: "Mirin Hon" })),
+      update: vi.fn(async () => ({})),
     },
     ingredientPrice: { create: vi.fn(async () => ({})) },
+    recipeIngredient: { updateMany: vi.fn(async () => ({})) },
+    // $transaction krijgt een array van (gemockte) operatie-promises; resolve ze.
+    $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   },
   getTenant: vi.fn(async () => ({ locationId: "loc", userId: "u", orgId: "o", role: "CHEF" })),
+  evaluateMarginAlerts: vi.fn(async () => {}),
 }));
 vi.mock("@/server/db", () => ({ prisma: db }));
 vi.mock("@/server/tenant", () => ({ getTenant }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("./watchdog", () => ({ evaluateMarginAlerts }));
 
-import { addCatalogItemFromLineAction } from "./ocr-actions";
+import { addCatalogItemFromLineAction, applyInvoiceAction } from "./ocr-actions";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -68,5 +77,49 @@ describe("addCatalogItemFromLineAction", () => {
     await expect(
       addCatalogItemFromLineAction({ name: "X", unit: "kg", price: -1, category: "Overig" }),
     ).rejects.toBeTruthy();
+  });
+});
+
+describe("applyInvoiceAction", () => {
+  it("werkt gekoppelde regels bij en triggert de Marge-Waakhond met de prijswijziging", async () => {
+    // Bestaand catalogusartikel dat de regel matcht; oude prijs 9,80 → nieuw 11,20.
+    db.catalogItem.findFirst.mockResolvedValueOnce({ id: "boter1", name: "Roomboter ongezouten", price: "9.80" });
+
+    const res = await applyInvoiceAction({
+      lines: [{ matchedId: "boter1", keyword: "roomboter", unitPrice: 11.2 }],
+    });
+
+    expect(res).toEqual({ applied: 1 });
+
+    // Prijs landt op de catalogus, in de historie (source "ocr") en in de receptuur.
+    expect(db.catalogItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "boter1" }, data: { price: "11.20" } }),
+    );
+    expect(db.ingredientPrice.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { catalogItemId: "boter1", price: "11.20", source: "ocr" } }),
+    );
+    expect(db.recipeIngredient.updateMany).toHaveBeenCalled();
+
+    // Kern van deze opschoning: de Waakhond wordt vanuit de OCR-flow aangeroepen,
+    // met een échte prijsstijging (oud < nieuw) als PriceChange.
+    expect(evaluateMarginAlerts).toHaveBeenCalledTimes(1);
+    const [locationId, changes] = evaluateMarginAlerts.mock.calls[0] as unknown as [string, PriceChange[]];
+    expect(locationId).toBe("loc");
+    expect(changes).toEqual([
+      { keyword: "roomboter", name: "Roomboter ongezouten", oldPrice: 9.8, newPrice: 11.2 },
+    ]);
+  });
+
+  it("slaat regels over waarvan het artikel niet in deze locatie bestaat (tenant-scoping)", async () => {
+    db.catalogItem.findFirst.mockResolvedValueOnce(null);
+
+    const res = await applyInvoiceAction({
+      lines: [{ matchedId: "onbekend", keyword: "boter", unitPrice: 11.2 }],
+    });
+
+    expect(res).toEqual({ applied: 0 });
+    expect(db.catalogItem.update).not.toHaveBeenCalled();
+    // De Waakhond wordt nog steeds aangeroepen, maar met een lege changeset (no-op).
+    expect(evaluateMarginAlerts).toHaveBeenCalledWith("loc", []);
   });
 });

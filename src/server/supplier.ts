@@ -1,8 +1,8 @@
 import { prisma } from "@/server/db";
 
-// Supplier Portal-data. We volgen een set kernartikelen die de marge bepalen.
-// Nu gesimuleerd; in productie vervangen door echte Hanos/Sligro-feeds (adapter
-// per leverancier). De prijshistorie loopt al via IngredientPrice.
+// Supplier Portal-data. We volgen een set kernartikelen die de marge bepalen en
+// tonen hun actuele catalogusprijs (alleen-lezen overzicht). Prijs­updates komen
+// van de factuur-OCR; de prijshistorie loopt via IngredientPrice.
 
 // Kernartikelen (zoekterm → het wordt gematcht op het goedkoopste catalogusitem).
 export const TRACKED_KEYWORDS = ["zalm", "boter", "mirin", "rijst", "sesam", "miso"];

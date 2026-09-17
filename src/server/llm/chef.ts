@@ -1,6 +1,7 @@
 import { prisma } from "@/server/db";
 import { getVersionCostMap } from "@/server/recipe-cost-graph";
-import type { VersionCost } from "@/lib/component-cost";
+import { getOpenAlerts } from "@/server/watchdog";
+import { isVersionPriceComplete, type VersionCost } from "@/lib/component-cost";
 import { FLAVOR_DB } from "@/lib/flavor-data";
 import { getRouter } from "./router";
 import { llmConfig } from "./config";
@@ -16,7 +17,7 @@ import type { LlmMessage } from "./types";
 
 // Structurele types (los van Prisma) zodat de mapping puur en testbaar is.
 type DecimalLike = { toString(): string };
-type CtxIngredient = { name: string; amount: DecimalLike; unit: string; mode: string; pricePerUnit: DecimalLike };
+type CtxIngredient = { name: string; amount: DecimalLike; unit: string; mode: string; pricePerUnit: DecimalLike | null };
 type CtxActiveVersion = { id: string; label: string; name: string; ingredients: CtxIngredient[] };
 export type CtxRecipe = {
   id: string;
@@ -39,7 +40,12 @@ export function buildMenuContext(recipes: CtxRecipe[], costByVersion: Map<string
     // Foodcost/portie uit dezelfde resolver als Lab/Library (incl. componenten),
     // zodat Auguste nooit afwijkende cijfers noemt. Marge alleen bij een positieve
     // menuprijs (sub-recepten kunnen €0 zijn).
-    const foodcost = v ? costByVersion.get(v.id)?.foodcostPerServing ?? null : null;
+    // Cruciaal: is de kostprijs ONVOLLEDIG (een ingrediënt/component zonder prijs),
+    // dan geven we GEEN (partieel) getal door — foodcost én marge worden null, zodat
+    // Auguste nooit een schijnbaar-precies percentage over alleen de bekende
+    // ingrediënten kan tonen. `foodcostPerServing` uit de map is dan bewust genegeerd.
+    const foodcostComplete = v ? isVersionPriceComplete(costByVersion, v.id) : true;
+    const foodcost = v && foodcostComplete ? costByVersion.get(v.id)?.foodcostPerServing ?? null : null;
     const price = Number(r.menuPrice);
     const fc = foodcost ? foodcost.toNumber() : null;
     return {
@@ -48,6 +54,8 @@ export function buildMenuContext(recipes: CtxRecipe[], costByVersion: Map<string
       category: r.category,
       menuPrice: price,
       popularity: r.popularity,
+      // false = één of meer ingrediënten zonder prijs → marge/foodcost NIET bepaalbaar.
+      foodcostComplete,
       marginPct: fc !== null && price > 0 ? Number((((price - fc) / price) * 100).toFixed(1)) : null,
       foodcostPerCover: fc !== null ? Number(fc.toFixed(2)) : null,
       activeVersion: v ? { id: v.id, label: v.label, name: v.name } : null,
@@ -55,13 +63,18 @@ export function buildMenuContext(recipes: CtxRecipe[], costByVersion: Map<string
       // versie-id kan meekrijgen (id = versie-id).
       versions: r.versions.map((ver) => ({ id: ver.id, label: ver.label, name: ver.name })),
       ingredients:
-        v?.ingredients.map((i) => ({ name: i.name, perCover: `${i.amount}${i.unit}`, pricePerUnit: Number(i.pricePerUnit) })) ?? [],
+        v?.ingredients.map((i) => ({
+          name: i.name,
+          perCover: `${i.amount}${i.unit}`,
+          // null = prijs onbekend (nog niet in de catalogus) — nooit als 0 tonen.
+          pricePerUnit: i.pricePerUnit == null ? null : Number(i.pricePerUnit),
+        })) ?? [],
     };
   });
 }
 
 async function buildContext(locationId: string) {
-  const [recipes, catalogCount, checkpoints, costMap] = await Promise.all([
+  const [recipes, catalogCount, checkpoints, costMap, alerts] = await Promise.all([
     prisma.recipe.findMany({
       // Sub-recepten (alleen-component) horen niet in het menu-overzicht dat
       // Auguste ziet; ze zijn alleen relevant als component van een gerecht.
@@ -80,6 +93,10 @@ async function buildContext(locationId: string) {
     // Component-inclusieve kosten voor de HELE locatie (ook de versies van
     // componenten, die niet in het gefilterde menu zitten).
     getVersionCostMap(locationId),
+    // Openstaande Marge-Waakhond-alerts: zo weet Auguste welk gerecht/ingrediënt
+    // onder druk staat én heeft hij het alertId om resolve_margin_alert te kunnen
+    // aanroepen wanneer de gebruiker om advies vraagt.
+    getOpenAlerts(locationId),
   ]);
 
   return {
@@ -88,6 +105,7 @@ async function buildContext(locationId: string) {
     haccp: checkpoints,
     menu: buildMenuContext(recipes, costMap),
     flavor: buildFlavorContext(),
+    alerts,
   };
 }
 
@@ -106,7 +124,7 @@ export function buildFlavorContext() {
   };
 }
 
-function buildSystem(context: unknown): string {
+export function buildSystem(context: unknown): string {
   return (
     "Je bent Chef Auguste, de digitale sous-chef de cuisine binnen SousPlus+, een premium platform voor professionele keukens. " +
     "Je spreekt Nederlands. Je bent GEEN chatbot: je spreekt als een doorgewinterde brigade-souschef op Michelin-niveau — beslist, precies, warm maar met gezag, met natuurlijk gebruik van culinair-Franse vaktermen. " +
@@ -115,9 +133,12 @@ function buildSystem(context: unknown): string {
     "Baseer alles op de meegeleverde APP-CONTEXT (echte recepturen, prijzen, marges, HACCP). Citeer concrete getallen waar relevant; verzin geen cijfers die niet kloppen met de context. " +
     "Gebruik de beschikbare tools om acties echt uit te voeren wanneer de chef daarom vraagt (recept opslaan of aanpassen, HACCP klaarzetten of invullen, leverancier wisselen, navigeren). Beschrijf kort in je proza wat je doet; de tool voert het uit. Voer geen actie uit als er alleen om advies of analyse wordt gevraagd. " +
     "Wanneer een vraag of opdracht over concrete ingrediënten, prijzen of een nieuwe receptuur gaat, gebruik je EERST search_ingredients om echte artikelen en prijzen uit de Hanos/Sligro-catalogus op te halen, en pas daarna reken of stel je voor — verzin geen prijzen. Sla een recept dat je voorstelt ook echt op met save_recipe_version, met de gevonden prijzen als p (prijs per kg/L) en de hoeveelheid als g (gram per couvert). " +
+    "Ongeprijsde ingrediënten: staat een ingrediënt dat je wilt voorstellen écht niet in de catalogus (search_ingredients geeft geen bruikbare treffer), dan LAAT JE p WEG bij dat ingrediënt in plaats van een prijs te verzinnen of 0 in te vullen — de prijs geldt dan als 'onbekend'. Meld dit proactief en expliciet in je proza (bijvoorbeeld: 'let op: [ingrediënt] staat nog niet in onze catalogus, de kostprijs is dus onbekend tot je 'm invult in de Recipe Lab'). " +
+    "ABSOLUUT VERBOD bij een onvolledig geprijsd recept: noem dan GEEN margepercentage en GEEN foodcost-bedrag — ook niet als 'voorlopig', 'onvolledig', 'circa', of berekend over enkel de bekende ingrediënten. Reken zo'n getal ook NIET zelf uit in je antwoordtekst. Zeg puur in woorden dat de marge en foodcost nog niet te bepalen zijn zolang de ontbrekende prijs niet is ingevuld — presenteer geen enkel getal dat de indruk van precisie wekt. Je herkent een onvolledig recept aan foodcostComplete: false en/of marginPct: null bij het gerecht in de APP-CONTEXT, aan pricePerUnit: null bij een ingrediënt, en aan de 'LET OP … prijs onbekend'-melding die een tool teruggeeft na het opslaan. " +
     "Elk gerecht in de APP-CONTEXT heeft een recipeId, een activeVersion met een id, en een lijst versions met per versie een id + label. Gebruik ALTIJD deze echte id's uit de context — verzin of gok NOOIT een id. Voor update_recipe_version geef je id = het versie-id mee (meestal activeVersion.id, of het bijpassende id uit versions). Voor een nieuwe versie van een BESTAAND recept geef je recipeId mee aan save_recipe_version. " +
     "Componenten/sub-recepten: als er expliciet om een component of sub-recept (bv. een saus) VOOR een bestaand gerecht wordt gevraagd, maak je het recept met save_recipe_version en geef je asComponentOf.parentRecipeId mee (= recipeId van het ouderrecept) — dan wordt het meteen gekoppeld. Bestaat het te koppelen recept al, gebruik dan link_component met parentRecipeId + childRecipeId in plaats van een nieuw recept te maken. Koppelen vraagt eerst een bevestiging; als het koppelen faalt (bijvoorbeeld door de cyclus- of dieptecheck), meld dat dan eerlijk en doe niet alsof het gelukt is. " +
     "Als een tool een fout teruggeeft, presenteer je het resultaat NOOIT alsof het gelukt is: meld eerlijk en beknopt dat het niet lukte. Cijfers als marge en foodcost baseer je uitsluitend op de APP-CONTEXT (huidige staat); een uitkomst ná een wijziging die niet is opgeslagen noem je expliciet 'verwacht/na aanpassing', nooit als vaststaand feit. " +
+    "Marge-Waakhond: de APP-CONTEXT bevat onder 'alerts' de openstaande marge-waarschuwingen (elk met id, ingredient, dish, affectedRecipeId, deltaPct, currentMarginPct). Vraagt de gebruiker om mee te denken over zo'n alert, geef dan NIET klakkeloos 'wissel van leverancier', maar draag 2 à 3 concrete, onderbouwde opties aan — bijvoorbeeld een goedkoper alternatief of substituut-ingrediënt (gebruik search_ingredients voor échte catalogusprijzen), een aangepaste portie, een menuprijs­aanpassing, of een combinatie — met per optie het effect op de marge. Voer een gekozen aanpak zelf uit via de juiste tool (switch_supplier, of update_recipe_version voor portie/menuprijs) en sluit de alert daarna af met resolve_margin_alert (alertId uit de context + een korte omschrijving van de aanpak). Sluit een alert nooit ongevraagd: doe het pas als de gebruiker een richting heeft gekozen. " +
     "Bij vragen over smaakcombinaties/pairings: de APP-CONTEXT bevat onder 'flavor' een GECUREERDE affinity-set (flavor.curatedIngredients + flavor.pairings), nu beperkt tot enkele basisingrediënten. Zit het gevraagde ingrediënt in die set, dan mag je een concrete match presenteren als 'affinity-score X uit onze data'. Zit het ingrediënt of de combinatie er NIET in (bv. eendenlever, miso als basis, en de meeste andere), zeg dan NOOIT dat je het niet weet en verzin NOOIT een exacte score: gebruik je eigen brede culinaire kennis als AI om onderbouwd te adviseren — welke smaken, texturen en bereidingen samengaan en waarom — en frame dat expliciet als culinair inzicht ('op basis van culinaire ervaring'), niet als een geverifieerd datapunt. Maak het onderscheid tussen beide bronnen in je antwoord altijd duidelijk. De gecureerde set is een tussenstap; de bredere Foodpairing®-koppeling volgt in fase 2. " +
     "APP-CONTEXT (JSON):\n" +
     JSON.stringify(context)

@@ -3,6 +3,7 @@ import { prisma } from "@/server/db";
 import { CostMode } from "@/generated/prisma/enums";
 import { appendRecord } from "@/server/haccp/records";
 import { switchSupplierFor } from "@/server/supplier-switch";
+import { resolveAlert } from "@/server/watchdog";
 import { linkComponent, activeVersionIdOf } from "@/server/components";
 import { normalizeWeightUnit } from "@/lib/units";
 import type { ToolSchema } from "./types";
@@ -20,7 +21,7 @@ import type { ToolSchema } from "./types";
 export type ToolContext = { locationId: string; userId: string };
 
 export type ChefAction = {
-  kind: "recipe" | "haccp" | "supplier" | "navigate" | "search";
+  kind: "recipe" | "haccp" | "supplier" | "navigate" | "watchdog";
   label: string;
   detail?: string;
   href?: string;
@@ -59,7 +60,11 @@ const ING_JSON = {
           "Hoeveelheid per couvert in GRAM (weight) of ml (volume), NIET in kg/L. Reken de catalogus-eenheid om: 0,08 kg = 80.",
       },
       unit: { type: "string", description: 'Alleen "g" of "ml" (weight), of een stukseenheid (piece). Nooit de catalogus-eenheid kg/L.' },
-      p: { type: "number", description: "Inkoopprijs per kg/L (weight) of per stuk (piece), zoals in de catalogus." },
+      p: {
+        type: "number",
+        description:
+          "Inkoopprijs per kg/L (weight) of per stuk (piece), zoals in de catalogus. LAAT DIT VELD WEG als het ingrediënt niet in de catalogus staat en je de echte prijs niet kent — de prijs is dan 'onbekend'. Verzin NOOIT een prijs en vul NOOIT 0 in om het veld te vullen.",
+      },
       mode: { type: "string", enum: ["weight", "piece"] },
     },
   },
@@ -70,7 +75,9 @@ const ingredientZod = z.array(
     name: z.string().min(1),
     g: z.number().nonnegative(),
     unit: z.string().optional(),
-    p: z.number().nonnegative(),
+    // p weglaten (of null) = prijs onbekend: het ingrediënt staat nog niet in de
+    // catalogus. De motor behandelt dit nooit als €0; de foodcost wordt onvolledig.
+    p: z.number().nonnegative().nullish(),
     mode: z.enum(["weight", "piece"]).optional(),
   }),
 );
@@ -89,8 +96,29 @@ function toIngredientCreate(i: IngredientInput) {
     amount: i.g.toString(),
     unit: isPiece ? (i.unit?.trim() || "stuk") : normalizeWeightUnit(i.unit),
     mode: isPiece ? CostMode.PIECE : CostMode.WEIGHT,
-    pricePerUnit: i.p.toString(),
+    // p weggelaten/null ⇒ prijs onbekend (NULL), nooit stilzwijgend €0.
+    pricePerUnit: i.p == null ? null : i.p.toString(),
   };
+}
+
+/** Namen van ingrediënten zonder bekende prijs (p weggelaten/null). */
+function unpricedNames(ingredients?: IngredientInput[]): string[] {
+  return (ingredients ?? []).filter((i) => i.p == null).map((i) => i.name);
+}
+
+/**
+ * Transparantie-nootje voor het tool-resultaat: benoemt ongeprijsde ingrediënten
+ * zodat Chef Auguste dit expliciet aan de chef meldt (nooit stilzwijgend opslaan
+ * alsof de kostprijs compleet is). Lege string als alles geprijsd is.
+ */
+function unpricedNote(ingredients?: IngredientInput[]): string {
+  const names = unpricedNames(ingredients);
+  if (names.length === 0) return "";
+  const lijst = names.join(", ");
+  return (
+    ` LET OP: ${lijst} ${names.length === 1 ? "staat" : "staan"} nog niet in de catalogus, dus de prijs is onbekend — ` +
+    "de foodcost en marge zijn daardoor onvolledig tot de chef de prijs invult in de Recipe Lab. Meld dit expliciet."
+  );
 }
 
 // --- search_ingredients ------------------------------------------------------
@@ -146,9 +174,11 @@ const searchTool: ChefTool = {
       unit: i.unit,
       price: Number(i.price),
     }));
+    // Alleen de tekst (JSON) gaat terug naar het model; er wordt bewust geen
+    // UI-chip getoond — het aantal treffers is interne debug-info, geen
+    // gebruikersgerichte actie.
     return {
       text: JSON.stringify({ count: mapped.length, items: mapped }),
-      action: { kind: "search", label: `${mapped.length} artikelen gevonden`, detail: query },
     };
   },
 };
@@ -269,7 +299,7 @@ const saveTool: ChefTool = {
       }
       const href = `/lab?recipe=${encodeURIComponent(recipeId)}`;
       return {
-        text: `Opgeslagen als ${label} · ${d.name} en gekoppeld als component.`,
+        text: `Opgeslagen als ${label} · ${d.name} en gekoppeld als component.` + unpricedNote(d.ingredients),
         action: { kind: "recipe", label: `Component gekoppeld: ${d.name}`, href },
       };
     }
@@ -277,7 +307,7 @@ const saveTool: ChefTool = {
     // Open in de Lab exact het zojuist opgeslagen recept (niet het standaardgerecht).
     const href = `/lab?recipe=${encodeURIComponent(recipeId)}`;
     return {
-      text: `Opgeslagen als ${label} · ${d.name}.`,
+      text: `Opgeslagen als ${label} · ${d.name}.` + unpricedNote(d.ingredients),
       // Geen automatische navigatie: de gebruiker springt zelf via de knop.
       action: { kind: "recipe", label: `Opgeslagen: ${label} · ${d.name}`, href },
     };
@@ -349,7 +379,7 @@ const updateTool: ChefTool = {
     // Open in de Lab exact het zojuist bewerkte recept (niet het standaardgerecht).
     const href = `/lab?recipe=${encodeURIComponent(version.recipeId)}`;
     return {
-      text: "Receptversie bijgewerkt.",
+      text: "Receptversie bijgewerkt." + unpricedNote(d.ingredients),
       // Geen automatische navigatie: de gebruiker springt zelf via de knop.
       action: { kind: "recipe", label: "Receptversie bijgewerkt", href },
     };
@@ -575,6 +605,40 @@ const navigateTool: ChefTool = {
   },
 };
 
+// --- resolve_margin_alert (sluit een Waakhond-alert ⇒ bevestiging) -----------
+
+const resolveAlertZod = z.object({
+  alertId: z.string().min(1),
+  resolution: z.string().min(1).max(400),
+});
+
+const resolveAlertTool: ChefTool = {
+  name: "resolve_margin_alert",
+  description:
+    "Sluit een Marge-Waakhond-alert af met je gekozen aanpak als vrije toelichting. Gebruik het echte alertId uit de APP-CONTEXT (alerts[].id). Dit markeert de alert als opgelost en legt je aanpak vast — het voert zélf géén prijs- of leverancierswijziging door. Voer de concrete wijziging daarom EERST uit via de juiste tool (switch_supplier voor een leverancierswissel, update_recipe_version voor een portie- of menuprijs­aanpassing) en sluit daarna pas de alert. Gebruik dit alleen als de gebruiker een aanpak heeft gekozen.",
+  input_schema: {
+    type: "object",
+    properties: {
+      alertId: { type: "string", description: "Het id van de alert uit APP-CONTEXT alerts[].id." },
+      resolution: {
+        type: "string",
+        description: "Korte omschrijving van de gekozen oplossing, bv. 'Portie roomboter naar 45g en menuprijs +€1,00'.",
+      },
+    },
+    required: ["alertId", "resolution"],
+  },
+  zod: resolveAlertZod,
+  confirm: true,
+  async execute(input, ctx) {
+    const { alertId, resolution } = resolveAlertZod.parse(input);
+    const res = await resolveAlert(ctx.locationId, alertId, "advise", resolution);
+    return {
+      text: res.message,
+      action: { kind: "watchdog", label: "Waakhond-alert opgelost", detail: resolution },
+    };
+  },
+};
+
 export const CHEF_TOOLS: ChefTool[] = [
   searchTool,
   saveTool,
@@ -584,6 +648,7 @@ export const CHEF_TOOLS: ChefTool[] = [
   switchTool,
   linkTool,
   navigateTool,
+  resolveAlertTool,
 ];
 
 export const TOOL_SCHEMAS: ToolSchema[] = CHEF_TOOLS.map((t) => ({

@@ -45,6 +45,20 @@ describe("tool zod-validatie", () => {
     expect(zodFor("link_component").safeParse({}).success).toBe(false);
   });
 
+  it("save_recipe_version accepteert een ingrediënt ZONDER prijs (prijs onbekend)", () => {
+    // p weglaten is geldig = prijs onbekend; p mag ook expliciet null zijn.
+    expect(
+      zodFor("save_recipe_version").safeParse({ name: "v1", ingredients: [{ name: "Wilde tijm", g: 5 }] }).success,
+    ).toBe(true);
+    expect(
+      zodFor("save_recipe_version").safeParse({ name: "v1", ingredients: [{ name: "Wilde tijm", g: 5, p: null }] }).success,
+    ).toBe(true);
+    // Een negatieve prijs blijft ongeldig.
+    expect(
+      zodFor("save_recipe_version").safeParse({ name: "v1", ingredients: [{ name: "x", g: 5, p: -1 }] }).success,
+    ).toBe(false);
+  });
+
   it("save_recipe_version accepteert optioneel asComponentOf", () => {
     expect(zodFor("save_recipe_version").safeParse({ name: "Saus v1", dish: "Saus", asComponentOf: { parentRecipeId: "rec_x" } }).success).toBe(true);
     // asComponentOf zonder parentRecipeId is ongeldig.
@@ -73,9 +87,9 @@ describe("normalizeWeightUnit", () => {
 
 describe("tool-metadata", () => {
   it("levert alle tools met API-schema's", () => {
-    expect(CHEF_TOOLS).toHaveLength(8);
+    expect(CHEF_TOOLS).toHaveLength(9);
     expect(TOOL_SCHEMAS.map((t) => t.name).sort()).toEqual(
-      ["fill_haccp", "link_component", "navigate_app", "prepare_haccp", "save_recipe_version", "search_ingredients", "switch_supplier", "update_recipe_version"].sort(),
+      ["fill_haccp", "link_component", "navigate_app", "prepare_haccp", "resolve_margin_alert", "save_recipe_version", "search_ingredients", "switch_supplier", "update_recipe_version"].sort(),
     );
   });
 
@@ -83,6 +97,7 @@ describe("tool-metadata", () => {
     expect(TOOL_BY_NAME.get("update_recipe_version")?.confirm).toBe(true);
     expect(TOOL_BY_NAME.get("switch_supplier")?.confirm).toBe(true);
     expect(TOOL_BY_NAME.get("link_component")?.confirm).toBe(true);
+    expect(TOOL_BY_NAME.get("resolve_margin_alert")?.confirm).toBe(true);
     expect(TOOL_BY_NAME.get("search_ingredients")?.confirm).toBe(false);
     expect(TOOL_BY_NAME.get("save_recipe_version")?.confirm).toBe(false);
   });

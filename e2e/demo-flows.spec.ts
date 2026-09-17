@@ -13,7 +13,7 @@ test("alle modules renderen voor een ingelogde chef", async ({ page }) => {
     ["/ingredients", /Hanos/],
     ["/library", /Open in Lab/],
     ["/matrix", "STERREN"],
-    ["/supplier", /Force Live API Re-Sync/],
+    ["/supplier", /Actuele inkoopprijzen/],
     ["/ocr", /Scan factuur/],
     ["/haccp", /Audit-logboek/],
   ];
@@ -144,16 +144,40 @@ test("HACCP: een meting vastleggen verschijnt in de audit trail", async ({ page 
   await expect(page.getByText("3.00").first()).toBeVisible();
 });
 
-test("Marge-Waakhond: re-sync triggert een alert en herstelt via leverancier wisselen", async ({ page }) => {
-  await page.goto("/supplier");
-  await page.getByRole("button", { name: "Force Live API Re-Sync" }).click();
+test("Marge-Waakhond: een factuur-OCR-prijsupdate triggert een alert en herstelt via leverancier wisselen", async ({ page }) => {
+  // De simulatie-feed is verwijderd; de Waakhond wordt nu getriggerd door de
+  // échte prijsbron: het toepassen van gescande factuurregels (applyInvoiceAction).
+  // De voorbeeldfactuur tilt o.a. de roomboter naar €11,20/kg, wat de marge van de
+  // actieve Miso-Glazed Salmon onder de kritieke grens (70%) duwt.
+  await page.goto("/ocr");
+  await page.setInputFiles('[data-testid="ocr-file-input"]', {
+    name: "factuur.pdf",
+    mimeType: "application/pdf",
+    buffer: buildInvoicePdf(SAMPLE_INVOICE_TEXT),
+  });
+  await page.getByRole("button", { name: "Scan factuur" }).click();
+  await expect(page.getByText(/regels herkend/)).toBeVisible({ timeout: 30_000 });
 
-  // De bel toont na de prijscascade (boter +14%) een waarschuwing.
+  // Pas de gekoppelde regels toe: dit muteert de voorraadprijzen én roept de
+  // Marge-Waakhond aan (dezelfde evaluateMarginAlerts als voorheen de re-sync).
+  await page.getByRole("button", { name: /voorraadprijzen bij/ }).click();
+  await expect(page.getByText("Voorraadprijzen bijgewerkt")).toBeVisible({ timeout: 15_000 });
+
+  // De bel toont na de prijscascade een waarschuwing.
   const bell = page.getByRole("button", { name: "Marge-Waakhond" });
   await expect(bell).toContainText("1", { timeout: 30_000 });
 
+  // Entry point naar Chef Auguste: de knop zet de situatie klaar als vraag en
+  // springt naar de chat, waar hij automatisch wordt verstuurd (en geëchood).
   await bell.click();
   await expect(page.getByText(/onder de kritieke grens/)).toBeVisible();
+  await page.getByRole("button", { name: /Vraag Chef Auguste om advies/ }).click();
+  await page.waitForURL("**/chef");
+  await expect(page.getByText(/De Marge-Waakhond slaat alarm/).first()).toBeVisible({ timeout: 15_000 });
+
+  // De alert staat nog open (Auguste lost pas op na bevestiging). Herstel via de
+  // snelle actie "leverancier wisselen" — de bel zit ook in de chat-header.
+  await bell.click();
   await page.getByRole("button", { name: "Wissel leverancier" }).click();
 
   // Na herstel is er geen actieve waarschuwing meer.

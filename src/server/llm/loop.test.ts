@@ -41,7 +41,7 @@ function toolResults(messages: ReturnType<typeof runToolLoop> extends Promise<in
 
 describe("runToolLoop", () => {
   it("voert een tool uit en rondt af met de proza-tekst", async () => {
-    const execute = vi.fn(async () => ({ text: "10 artikelen", action: { kind: "search" as const, label: "10 artikelen" } }));
+    const execute = vi.fn(async () => ({ text: "10 artikelen", action: { kind: "recipe" as const, label: "Opgeslagen" } }));
     const deps = baseDeps({
       call: scriptedCall([toolRes("search_ingredients", { query: "biet" }, "Eerst de catalogus."), textRes("Voorstel klaar.")]),
       execute,

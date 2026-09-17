@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isMarginCriticalPct, marginTextClass, marginChipClass, marginApplies } from "@/lib/margin";
+import { isMarginCriticalPct, marginTextClass, marginChipClass, marginApplies, unpricedNames } from "@/lib/margin";
 
 describe("marge-styling", () => {
   it("n.v.t. (null) is nooit kritiek en krijgt een neutrale kleur", () => {
@@ -25,5 +25,21 @@ describe("marge-styling", () => {
     expect(marginApplies(true, 0)).toBe(false);
     expect(marginApplies(false, 0)).toBe(false); // geen prijs → geen marge
     expect(marginApplies(false, 24.5)).toBe(true); // normaal verkoopbaar gerecht
+  });
+});
+
+describe("unpricedNames", () => {
+  it("geeft de namen van ingrediënten zonder bekende prijs (pricePerUnit null)", () => {
+    const ingredients = [
+      { name: "Zalmfilet", pricePerUnit: "38.50" },
+      { name: "Wilde daslook", pricePerUnit: null },
+      { name: "Sjalot", pricePerUnit: "2.20" },
+      { name: "Zeekraal", pricePerUnit: null },
+    ];
+    expect(unpricedNames(ingredients)).toEqual(["Wilde daslook", "Zeekraal"]);
+  });
+
+  it("geeft een lege lijst als alles geprijsd is", () => {
+    expect(unpricedNames([{ name: "Zalmfilet", pricePerUnit: "38.50" }])).toEqual([]);
   });
 });

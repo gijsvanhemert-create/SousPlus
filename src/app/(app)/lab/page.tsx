@@ -1,5 +1,6 @@
 import { requireSession } from "@/server/tenant";
 import { getLabRecipes } from "@/server/recipes";
+import { listCatalogCategories } from "@/server/catalog";
 import { RecipeLab } from "@/components/recipe-lab";
 
 export default async function LabPage({
@@ -8,7 +9,11 @@ export default async function LabPage({
   searchParams: Promise<{ recipe?: string }>;
 }) {
   const session = await requireSession();
-  const [recipes, { recipe }] = await Promise.all([getLabRecipes(session.user.locationId), searchParams]);
+  const [recipes, categories, { recipe }] = await Promise.all([
+    getLabRecipes(session.user.locationId),
+    listCatalogCategories(session.user.locationId),
+    searchParams,
+  ]);
 
-  return <RecipeLab recipes={recipes} initialRecipeId={recipe} />;
+  return <RecipeLab recipes={recipes} categories={categories} initialRecipeId={recipe} />;
 }

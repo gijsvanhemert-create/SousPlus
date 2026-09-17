@@ -29,7 +29,7 @@ export async function loadVersionNodes(locationId: string): Promise<CostVersionN
       catalogItemId: i.catalogItemId,
       amount: i.amount.toString(),
       mode: i.mode as CostMode,
-      pricePerUnit: i.pricePerUnit.toString(),
+      pricePerUnit: i.pricePerUnit === null ? null : i.pricePerUnit.toString(),
     })),
     components: v.components.map((c) => ({ childVersionId: c.childVersionId, amount: c.amount.toString() })),
   }));

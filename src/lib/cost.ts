@@ -29,8 +29,13 @@ export interface CostIngredient {
   /** Gram/ml (WEIGHT) of aantal (PIECE). */
   amount: DecimalInput;
   mode: CostMode;
-  /** Prijs per kg/L (WEIGHT) of per eenheid (PIECE) — snapshot of live. */
-  pricePerUnit: DecimalInput;
+  /**
+   * Prijs per kg/L (WEIGHT) of per eenheid (PIECE) — snapshot of live.
+   * `null` = prijs ONBEKEND (ingrediënt nog niet in de catalogus). De motor
+   * behandelt dit NOOIT stilzwijgend als €0: de foodcost van het hele recept
+   * wordt dan "onbekend" (null) i.p.v. onterecht te positief.
+   */
+  pricePerUnit: DecimalInput | null;
 }
 
 /** Map catalogItemId → nieuwe prijs-per-eenheid (voor de Marge-Waakhond). */
@@ -44,11 +49,17 @@ export type PriceOverrides = Map<string, DecimalInput> | Record<string, DecimalI
  */
 export interface ComponentCost {
   amount: DecimalInput; // per couvert van de parent
-  unitCost: DecimalInput; // kost per g/ml of per portie van de component
+  /** Kost per g/ml of per portie van de component; `null` = prijs onbekend. */
+  unitCost: DecimalInput | null;
 }
 
-/** Kost van één component-regel voor één couvert: amount × unitCost. */
-export function componentCost(component: ComponentCost): Decimal {
+/**
+ * Kost van één component-regel voor één couvert: amount × unitCost.
+ * `null` wanneer de kost van de component onbekend is (ongeprijsd ingrediënt
+ * ergens in de component-keten) — propageert zo naar de parent-foodcost.
+ */
+export function componentCost(component: ComponentCost): Decimal | null {
+  if (component.unitCost == null) return null;
   return toDecimal(component.amount).mul(toDecimal(component.unitCost));
 }
 
@@ -96,42 +107,63 @@ export function toDecimal(value: DecimalInput): Decimal {
   return new Decimal(value.toString());
 }
 
-function resolvePrice(ing: CostIngredient, overrides?: PriceOverrides): Decimal {
+/** Prijs voor de berekening; `null` = onbekend (geen snapshot én geen override). */
+function resolvePrice(ing: CostIngredient, overrides?: PriceOverrides): Decimal | null {
   if (overrides && ing.catalogItemId != null) {
     const override =
       overrides instanceof Map ? overrides.get(ing.catalogItemId) : overrides[ing.catalogItemId];
     if (override != null) return toDecimal(override);
   }
-  return toDecimal(ing.pricePerUnit);
+  return ing.pricePerUnit == null ? null : toDecimal(ing.pricePerUnit);
 }
 
 /**
  * Foodcost van één ingrediënt voor één couvert.
  *   WEIGHT: (amount / 1000) × prijs   (amount in g/ml, prijs per kg/L)
  *   PIECE:  amount × prijs            (amount = aantal, prijs per eenheid)
+ * Geeft `null` als de prijs onbekend is (NOOIT stilzwijgend €0).
  */
-export function ingredientCost(ing: CostIngredient, overrides?: PriceOverrides): Decimal {
-  const amount = toDecimal(ing.amount);
+export function ingredientCost(ing: CostIngredient, overrides?: PriceOverrides): Decimal | null {
   const price = resolvePrice(ing, overrides);
+  if (price === null) return null;
+  const amount = toDecimal(ing.amount);
   return ing.mode === "PIECE" ? amount.mul(price) : amount.div(THOUSAND).mul(price);
 }
 
-/** Foodcost per couvert: som over alle ingrediënten. */
-export function foodcost(ingredients: CostIngredient[], overrides?: PriceOverrides): Decimal {
-  return ingredients.reduce((sum, ing) => sum.add(ingredientCost(ing, overrides)), ZERO);
+/**
+ * Foodcost per couvert: som over alle ingrediënten. Geeft `null` zodra ook maar
+ * één ingrediënt een onbekende prijs heeft — de foodcost is dan onvolledig en
+ * mag niet als een (te lage) waarde worden gepresenteerd.
+ */
+export function foodcost(ingredients: CostIngredient[], overrides?: PriceOverrides): Decimal | null {
+  let sum = ZERO;
+  for (const ing of ingredients) {
+    const c = ingredientCost(ing, overrides);
+    if (c === null) return null;
+    sum = sum.add(c);
+  }
+  return sum;
 }
 
 /**
  * Foodcost per couvert incl. componenten — zonder menuprijs, dus veilig voor
  * (sub-)recepten met menuPrice 0 (waar marge niet gedefinieerd is).
+ * Geeft `null` als één ingrediënt óf één component (transitief) een onbekende
+ * prijs heeft.
  */
 export function recipeFoodcost(
   input: { ingredients: CostIngredient[]; components?: ComponentCost[] },
   overrides?: PriceOverrides,
-): Decimal {
+): Decimal | null {
   const ingredientsPerCover = foodcost(input.ingredients, overrides);
-  const componentsPerCover = (input.components ?? []).reduce((sum, c) => sum.add(componentCost(c)), ZERO);
-  return ingredientsPerCover.add(componentsPerCover);
+  if (ingredientsPerCover === null) return null;
+  let total = ingredientsPerCover;
+  for (const c of input.components ?? []) {
+    const cc = componentCost(c);
+    if (cc === null) return null;
+    total = total.add(cc);
+  }
+  return total;
 }
 
 /**
@@ -140,6 +172,9 @@ export function recipeFoodcost(
  * gewijzigde leveranciersprijzen.
  *
  * @throws als menuPrice ≤ 0 (marge is dan niet zinvol te bepalen).
+ * @throws als de foodcost onvolledig is (een ingrediënt/component zonder prijs);
+ *   de marge is dan niet te bepalen. Roep dit alleen aan voor volledig geprijsde
+ *   recepten — check vooraf met `recipeFoodcost(...) !== null`.
  */
 export function recipeCost(input: RecipeCostInput, options: RecipeCostOptions = {}): RecipeCost {
   const covers = options.covers ?? 1;
@@ -153,6 +188,9 @@ export function recipeCost(input: RecipeCostInput, options: RecipeCostOptions = 
   }
 
   const foodcostPerCover = recipeFoodcost(input, options.overrides);
+  if (foodcostPerCover === null) {
+    throw new Error("foodcost onvolledig: één of meer ingrediënten hebben geen bekende prijs");
+  }
   const grossProfitPerCover = menuPrice.sub(foodcostPerCover);
   const marginRatio = grossProfitPerCover.div(menuPrice);
 
