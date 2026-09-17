@@ -1,11 +1,16 @@
 import { LoginForm } from "./login-form";
 
 export default function LoginPage() {
+  // Demo-affordances (voorgevulde credentials + hint-tekst) alleen buiten een
+  // gehoste productieomgeving tonen. Op Vercel is process.env.VERCEL gezet ⇒
+  // verborgen op de publieke URL; lokaal (dev en e2e via next start) blijft het
+  // werken, zodat de Playwright-login op de voorgevulde velden kan blijven leunen.
+  const showDemo = !process.env.VERCEL;
   return (
     <div className="flex min-h-screen">
       {/* Formulier */}
       <div className="flex flex-1 items-center justify-center bg-canvas px-6 py-12">
-        <LoginForm />
+        <LoginForm showDemo={showDemo} />
       </div>
 
       {/* Sfeerpaneel (verborgen op smal) */}
