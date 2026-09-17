@@ -36,7 +36,7 @@ export type InvoiceLine = {
 };
 
 // Betekenisvolle woorden (>3 letters) uit een regelnaam, voor matching.
-function tokensOf(name: string): string[] {
+export function tokensOf(name: string): string[] {
   return name.toLowerCase().replace(/[^a-zà-ÿ\s]/gi, " ").split(/\s+/).filter((w) => w.length > 3);
 }
 
