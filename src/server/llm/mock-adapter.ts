@@ -1,4 +1,4 @@
-import type { LlmAdapter, LlmRequest, LlmResponse, AssistantBlock, LlmMessage } from "./types";
+import { systemToText, type LlmAdapter, type LlmRequest, type LlmResponse, type AssistantBlock, type LlmMessage } from "./types";
 import { SAMPLE_INVOICE_TEXT } from "@/lib/ocr-sample";
 
 // Mock-LLM voor lokale ontwikkeling en demo's zonder ANTHROPIC_API_KEY.
@@ -137,11 +137,13 @@ export class MockAdapter implements LlmAdapter {
   }
 
   async createMessage(req: LlmRequest): Promise<LlmResponse> {
+    // system kan nu een string of cache-blokken zijn; normaliseer naar tekst.
+    const system = systemToText(req.system);
     // Tier 1: OCR-extractie. De mock parseert de factuurtekst regelmatig (regex)
     // en geeft dezelfde JSON-array terug die het echte model zou geven. Bij een
     // foto/PDF (die de mock niet kan lezen) valt hij terug op de voorbeeldfactuur,
     // zodat de demo ook zonder API-sleutel regels toont.
-    if (req.system.includes("OCR-extractielaag")) {
+    if (system.includes("OCR-extractielaag")) {
       const src = lastUserHasMedia(req.messages) ? SAMPLE_INVOICE_TEXT : rawLastUserText(req.messages);
       return text(JSON.stringify(parseInvoiceMock(src)));
     }
@@ -191,7 +193,7 @@ export class MockAdapter implements LlmAdapter {
     // juiste recept raakt in plaats van een gegokt id.
     if (/(menuprijs|verhoog|verlaag|zet de prijs|prijs.*(aan|naar|op))/.test(q) && !/leverancier/.test(q)) {
       if (rounds === 0) {
-        const target = findRecipeInQuery(appContextMenu(req.system), q);
+        const target = findRecipeInQuery(appContextMenu(systemToText(req.system)), q);
         const price = parseTargetPrice(q);
         if (target?.activeVersion?.id && price) {
           return toolCall(

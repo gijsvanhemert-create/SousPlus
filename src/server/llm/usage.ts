@@ -21,6 +21,8 @@ export async function logLlmUsage(entry: {
         action: entry.action,
         inputTokens: entry.usage.inputTokens,
         outputTokens: entry.usage.outputTokens,
+        cacheCreationTokens: entry.usage.cacheCreationInputTokens ?? 0,
+        cacheReadTokens: entry.usage.cacheReadInputTokens ?? 0,
       },
     });
   } catch (err) {

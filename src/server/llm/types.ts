@@ -40,9 +40,18 @@ export type ToolSchema = {
   input_schema: Record<string, unknown>;
 };
 
+/**
+ * Eén segment van de system-prompt. `cache: true` markeert een
+ * prompt-cache-breakpoint: alles vóór en op dit segment (incl. de tools, die in de
+ * cache-prefix aan het systeem voorafgaan) wordt door de provider gecachet. Zet
+ * dit alléén op het STABIELE deel; het dynamische deel erna volgt ongecachet.
+ */
+export type SystemBlock = { text: string; cache?: boolean };
+
 export type LlmRequest = {
   model: string;
-  system: string;
+  /** Platte string (geen caching) of blokken met een cache-breakpoint. */
+  system: string | SystemBlock[];
   messages: LlmMessage[];
   tools?: ToolSchema[];
   /** Forceer geen tool-gebruik meer (laatste ronde van de loop). */
@@ -50,10 +59,29 @@ export type LlmRequest = {
   maxTokens?: number;
 };
 
+/**
+ * Platte tekst van een system-prompt: een string blijft ongewijzigd, blokken
+ * worden samengevoegd. Voor adapters/mocks die de prompt als tekst inspecteren.
+ */
+export function systemToText(system: string | SystemBlock[]): string {
+  return typeof system === "string" ? system : system.map((b) => b.text).join("\n");
+}
+
 export type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | string;
 
-/** Tokenverbruik van één aanroep (voor kosten-telemetrie). */
-export type LlmUsage = { inputTokens: number; outputTokens: number };
+/**
+ * Tokenverbruik van één aanroep (voor kosten-telemetrie). Met prompt-caching telt
+ * `inputTokens` alléén de NIET-gecachte input; cache-writes en cache-reads worden
+ * apart geteld (writes ~1.25×, reads ~0.1× de normale inputprijs).
+ */
+export type LlmUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  /** Tokens die NU in de cache zijn geschreven (eerste keer / na TTL-verval). */
+  cacheCreationInputTokens?: number;
+  /** Tokens die uit de cache zijn GELEZEN (de besparing — dit is de cache-hit). */
+  cacheReadInputTokens?: number;
+};
 
 export type LlmResponse = {
   content: AssistantBlock[];
