@@ -38,6 +38,7 @@ import {
   removeComponent,
   repointComponentToActive,
   searchRecipesForComponent,
+  priceIngredientToCatalog,
 } from "@/server/recipe-actions";
 import { setComponentOnly } from "@/server/menu-actions";
 
@@ -67,9 +68,11 @@ function fmtTotal(amount: string, covers: number, unit: string, isPiece: boolean
 
 export function RecipeLab({
   recipes: initialRecipes,
+  categories,
   initialRecipeId,
 }: {
   recipes: LabRecipe[];
+  categories: string[];
   initialRecipeId?: string;
 }) {
   // Lokale werkkopie, geseed uit props — instant herberekening bij het bewerken
@@ -95,6 +98,45 @@ export function RecipeLab({
   const [compPicker, setCompPicker] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Inline "prijs invullen" voor een ongeprijsd ingrediënt (fase 4).
+  const defaultCategory = categories.includes("Overig") ? "Overig" : categories[0] ?? "Overig";
+  const [pricingId, setPricingId] = useState<string | null>(null);
+  const [priceInput, setPriceInput] = useState("");
+  const [priceCategory, setPriceCategory] = useState(defaultCategory);
+  const [priceSupplier, setPriceSupplier] = useState<"HANOS" | "SLIGRO" | "BEIDE">("BEIDE");
+  const [pricingError, setPricingError] = useState<string | null>(null);
+
+  function openPricing(ingId: string) {
+    setPricingId(ingId);
+    setPriceInput("");
+    setPriceCategory(defaultCategory);
+    setPriceSupplier("BEIDE");
+    setPricingError(null);
+  }
+
+  function submitPricing(ingId: string) {
+    setPricingError(null);
+    startTransition(async () => {
+      const res = await priceIngredientToCatalog({
+        ingredientId: ingId,
+        price: priceInput,
+        category: priceCategory,
+        supplier: priceSupplier,
+      });
+      if (!res.ok) {
+        setPricingError(res.error);
+        return;
+      }
+      // De prop-sync na revalidatePath werkt de ingrediëntprijs bij; sluit het formulier.
+      setPricingId(null);
+      setToast(
+        res.created
+          ? `${res.name} toegevoegd aan de catalogus en geprijsd.`
+          : `${res.name} gekoppeld aan de catalogus (prijs €${res.price.replace(".", ",")}).`,
+      );
+    });
+  }
 
   // Toast automatisch laten verdwijnen.
   useEffect(() => {
@@ -589,14 +631,13 @@ export function RecipeLab({
               });
               const lineCost = lineCostDec === null ? null : lineCostDec.mul(covers).toNumber();
               const totalDisp = fmtTotal(ing.amount, covers, ing.unit, isPiece);
+              const unpriced = ing.pricePerUnit === null;
               return (
-                <div
-                  key={ing.id}
-                  className="flex items-center justify-between gap-2 border-b border-canvas py-[9px]"
-                >
+                <div key={ing.id} className="border-b border-canvas">
+                <div className="flex items-center justify-between gap-2 py-[9px]">
                   <div className="flex min-w-0 flex-1 items-center gap-1.5">
                     <span className="truncate text-[13.5px] text-ink">{ing.name}</span>
-                    {!kitchenView && ing.pricePerUnit === null && (
+                    {!kitchenView && unpriced && (
                       <span
                         title="Prijs onbekend — dit ingrediënt staat nog niet in de catalogus."
                         className="shrink-0 rounded-full bg-champagne-soft px-1.5 py-0.5 text-[10px] font-semibold text-gold-deep"
@@ -645,6 +686,79 @@ export function RecipeLab({
                       </button>
                     )}
                   </div>
+                </div>
+
+                {!kitchenView && unpriced && (
+                  <div className="pb-2.5">
+                    {pricingId !== ing.id ? (
+                      <button
+                        onClick={() => openPricing(ing.id)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-gold bg-champagne-soft px-2.5 py-1 text-[11.5px] font-semibold text-gold-deep transition hover:bg-champagne"
+                      >
+                        <Plus size={12} /> Prijs invullen
+                      </button>
+                    ) : (
+                      <div className="rounded-[12px] border border-champagne bg-champagne-soft/60 p-3">
+                        <div className="mb-1.5 text-[11.5px] font-semibold text-gold-deep">
+                          Prijs invullen voor “{ing.name}” — voegt het toe aan de catalogus.
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="flex items-center gap-1 rounded-lg border border-line bg-card px-2 py-1">
+                            <span className="text-[12px] text-muted">€</span>
+                            <input
+                              value={priceInput}
+                              onChange={(e) => setPriceInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") submitPricing(ing.id);
+                              }}
+                              inputMode="decimal"
+                              autoFocus
+                              placeholder={ing.mode === "PIECE" ? "per stuk" : "per kg/L"}
+                              aria-label={`prijs ${ing.name}`}
+                              className="w-[86px] bg-transparent text-[13px] text-charcoal outline-none tabular-nums"
+                            />
+                          </label>
+                          <select
+                            value={priceCategory}
+                            onChange={(e) => setPriceCategory(e.target.value)}
+                            aria-label="categorie nieuw artikel"
+                            className="rounded-lg border border-line bg-card px-2 py-1.5 text-[12.5px] text-charcoal"
+                          >
+                            {categories.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            value={priceSupplier}
+                            onChange={(e) => setPriceSupplier(e.target.value as "HANOS" | "SLIGRO" | "BEIDE")}
+                            aria-label="leverancier nieuw artikel"
+                            className="rounded-lg border border-line bg-card px-2 py-1.5 text-[12.5px] text-charcoal"
+                          >
+                            <option value="BEIDE">Beide</option>
+                            <option value="HANOS">Hanos</option>
+                            <option value="SLIGRO">Sligro</option>
+                          </select>
+                          <button
+                            onClick={() => submitPricing(ing.id)}
+                            disabled={isPending || priceInput.trim() === ""}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-forest bg-forest px-3 py-1.5 text-[12.5px] font-semibold text-white transition disabled:opacity-60"
+                          >
+                            {isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Toevoegen
+                          </button>
+                          <button
+                            onClick={() => setPricingId(null)}
+                            className="rounded-lg px-2 py-1.5 text-[12.5px] font-semibold text-muted transition hover:text-charcoal"
+                          >
+                            Annuleren
+                          </button>
+                        </div>
+                        {pricingError && <div className="mt-1.5 text-[11.5px] text-danger">{pricingError}</div>}
+                      </div>
+                    )}
+                  </div>
+                )}
                 </div>
               );
             })}

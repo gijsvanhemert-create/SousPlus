@@ -118,6 +118,94 @@ export async function addIngredientFromCatalog(input: {
   revalidatePath(LAB_PATH);
 }
 
+// --- Ongeprijsd ingrediënt aanvullen: catalogusartikel + koppelen ------------
+
+// Vult de prijs van een ongeprijsd recept-ingrediënt in door het als (nieuw)
+// catalogusartikel op te voeren en het ingrediënt eraan te koppelen — hergebruikt
+// het "nieuw toevoegen"-patroon uit de OCR-flow, maar dan inline in de Recipe Lab.
+// Prijs moet > 0 zijn: 0 zou de "prijs onbekend"-toestand alleen maar vervangen
+// door een even misleidende €0.
+const priceIngredientSchema = z.object({
+  ingredientId: z.string().min(1),
+  price: decimalString(2).refine((d) => d.gt(0), "Prijs moet groter dan 0 zijn"),
+  category: z.string().trim().min(1).max(80),
+  supplier: z.enum(["HANOS", "SLIGRO", "BEIDE"]).default("BEIDE"),
+});
+
+export type PriceIngredientResult =
+  | { ok: true; name: string; created: boolean; price: string }
+  | { ok: false; error: string };
+
+export async function priceIngredientToCatalog(input: {
+  ingredientId: string;
+  price: string;
+  category: string;
+  supplier?: "HANOS" | "SLIGRO" | "BEIDE";
+}): Promise<PriceIngredientResult> {
+  const { locationId } = await getTenant();
+  const parsed = priceIngredientSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Ongeldige invoer." };
+  }
+  const { ingredientId, price, category, supplier } = parsed.data;
+
+  const ing = await prisma.recipeIngredient.findFirst({
+    where: { id: ingredientId, version: { recipe: { locationId } } },
+    select: { id: true, name: true, unit: true, mode: true },
+  });
+  if (!ing) return { ok: false, error: "Ingrediënt niet gevonden in deze locatie." };
+
+  // Catalogus-eenheid uit de opslag-eenheid: WEIGHT g→kg, ml→L (prijs per kg/L);
+  // PIECE houdt de eigen stukseenheid (prijs per stuk).
+  const catalogUnit = ing.mode === CostMode.WEIGHT ? (ing.unit === "ml" ? "L" : "kg") : ing.unit;
+
+  try {
+    // Dedup op naam (case-insensitief) binnen de locatie — net als de OCR-flow.
+    const existing = await prisma.catalogItem.findFirst({
+      where: { locationId, name: { equals: ing.name, mode: "insensitive" } },
+      select: { id: true, price: true },
+    });
+
+    let catalogItemId: string;
+    let finalPrice: string;
+    let created: boolean;
+    if (existing) {
+      // Artikel bestaat al: koppel eraan en neem de ECHTE catalogusprijs over
+      // (de getypte prijs negeren we — de catalogus is de bron van waarheid).
+      catalogItemId = existing.id;
+      finalPrice = existing.price.toFixed(2);
+      created = false;
+    } else {
+      finalPrice = price.toFixed(2);
+      const item = await prisma.catalogItem.create({
+        data: { locationId, name: ing.name, category, supplier, unit: catalogUnit, price: finalPrice },
+        select: { id: true },
+      });
+      // Eerste prijspunt in de historie, herkenbaar als handmatig vanuit de Lab.
+      await prisma.ingredientPrice.create({ data: { catalogItemId: item.id, price: finalPrice, source: "lab:new" } });
+      catalogItemId = item.id;
+      created = true;
+    }
+
+    // Koppel het recept-ingrediënt en vul de prijs in (was NULL = onbekend).
+    await prisma.recipeIngredient.update({
+      where: { id: ingredientId },
+      data: { catalogItemId, pricePerUnit: finalPrice },
+    });
+
+    revalidatePath(LAB_PATH);
+    revalidatePath("/ingredients");
+    return { ok: true, name: ing.name, created, price: finalPrice };
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    console.error(JSON.stringify({ at: "lab.priceIngredient", code: code ?? null, locationId, ingredientId }), err);
+    if (code === "P2003") {
+      return { ok: false, error: "Je sessie lijkt verlopen (locatie niet gevonden). Log opnieuw in en probeer het opnieuw." };
+    }
+    return { ok: false, error: "Aanvullen is mislukt. Probeer het later opnieuw." };
+  }
+}
+
 // --- Actieve (menu-)versie wisselen ------------------------------------------
 
 export async function setActiveVersion(input: {
