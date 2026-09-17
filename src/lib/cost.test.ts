@@ -66,7 +66,7 @@ describe("foodcost", () => {
     ];
     const fc = foodcost(items);
     expectDecimal(fc, "0.3");
-    expect(fc.toString()).toBe("0.3"); // float zou 0.30000000000000004 geven
+    expect(fc?.toString()).toBe("0.3"); // float zou 0.30000000000000004 geven
   });
 
   it("lege ingrediëntenlijst → 0", () => {

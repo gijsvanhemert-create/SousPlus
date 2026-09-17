@@ -56,7 +56,7 @@ export const TITLES: Record<string, string> = {
   lab: "R&D Recipe Lab",
   "recipe-import": "Recept importeren",
   flavor: "Moleculaire Smaakanalyse",
-  supplier: "Leveranciers in realtime",
+  supplier: "Actuele inkoopprijzen",
   ocr: "Factuurverwerking (OCR)",
   haccp: "Voedselveiligheid",
   library: "Actieve Menukaart",

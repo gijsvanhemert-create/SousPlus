@@ -75,9 +75,14 @@ export async function updatePopularity(input: { recipeId: string; coversPerMonth
 // Verwijder een recept volledig uit de bibliotheek (locatie-gescopet). Dit raakt
 // ook alle receptversies en hun ingrediënten: die gaan mee via ON DELETE CASCADE
 // (RecipeVersion.recipeId → Recipe, RecipeIngredient.versionId → RecipeVersion).
+// Expliciet ok/error resultaat (net als de OCR-/Lab-flows), zodat de UI de echte
+// oorzaak kan tonen i.p.v. een generieke "probeer opnieuw" — met name de nuttige
+// "wordt gebruikt als component in …"-melding, waar opnieuw proberen niet helpt.
+export type DeleteRecipeResult = { ok: true } | { ok: false; error: string };
+
 // We maken eerst de actieve-versie-koppeling los, zodat de FK Recipe.activeVersionId
 // het cascaderen niet blokkeert.
-export async function deleteRecipe(input: { recipeId: string }) {
+export async function deleteRecipe(input: { recipeId: string }): Promise<DeleteRecipeResult> {
   const { locationId } = await getTenant();
   const { recipeId } = z.object({ recipeId: z.string().min(1) }).parse(input);
 
@@ -85,7 +90,7 @@ export async function deleteRecipe(input: { recipeId: string }) {
     where: { id: recipeId, locationId },
     select: { id: true },
   });
-  if (!recipe) throw new Error("Recept niet gevonden in deze locatie.");
+  if (!recipe) return { ok: false, error: "Recept niet gevonden in deze locatie." };
 
   // Beschermd: een recept dat elders als component wordt gebruikt, mag niet zomaar
   // verdwijnen (dat zou de kostprijs van het parent-gerecht stilletjes breken).
@@ -95,15 +100,22 @@ export async function deleteRecipe(input: { recipeId: string }) {
   });
   if (usedIn.length > 0) {
     const dishes = Array.from(new Set(usedIn.map((u) => u.parentVersion.recipe.dish)));
-    throw new Error(`Kan niet verwijderen: wordt gebruikt als component in ${dishes.join(", ")}.`);
+    return { ok: false, error: `Kan niet verwijderen: wordt gebruikt als component in ${dishes.join(", ")}.` };
   }
 
-  await prisma.$transaction([
-    prisma.recipe.update({ where: { id: recipeId }, data: { activeVersionId: null } }),
-    prisma.recipe.delete({ where: { id: recipeId } }),
-  ]);
+  try {
+    await prisma.$transaction([
+      prisma.recipe.update({ where: { id: recipeId }, data: { activeVersionId: null } }),
+      prisma.recipe.delete({ where: { id: recipeId } }),
+    ]);
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    console.error(JSON.stringify({ at: "library.deleteRecipe", code: code ?? null, locationId, recipeId }), err);
+    return { ok: false, error: "Verwijderen is mislukt. Probeer het later opnieuw." };
+  }
 
   revalidatePath("/library");
   revalidatePath("/lab");
   revalidatePath("/matrix");
+  return { ok: true };
 }

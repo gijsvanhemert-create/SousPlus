@@ -6,6 +6,7 @@ import { Heart, ChefHat, ArrowRight, Trash2, AlertTriangle, Loader2 } from "luci
 import { eur, pct } from "@/lib/format";
 import { marginChipClass } from "@/lib/margin";
 import { toggleFavorite, deleteRecipe } from "@/server/menu-actions";
+import { runDeleteRecipe } from "@/lib/recipe-delete";
 import type { MenuItem } from "@/server/menu";
 
 const CAT_TINT: Record<string, string> = {
@@ -47,14 +48,20 @@ export function RecipeLibrary({ items: initialItems }: { items: MenuItem[] }) {
     const snapshot = items; // voor herstel bij een fout
     setItems((list) => list.filter((r) => r.id !== target.id)); // optimistisch verwijderen
     startDelete(async () => {
-      try {
-        await deleteRecipe({ recipeId: target.id });
-        setConfirmTarget(null);
-        router.refresh(); // hersynchroniseer met de server (versies/ingrediënten weg)
-      } catch {
-        setItems(snapshot); // draai de optimistische verwijdering terug
-        setDeleteError("Verwijderen mislukte — probeer het opnieuw.");
-      }
+      await runDeleteRecipe(
+        {
+          del: deleteRecipe,
+          onSuccess: () => {
+            setConfirmTarget(null);
+            router.refresh(); // hersynchroniseer met de server (versies/ingrediënten weg)
+          },
+          onError: (message) => {
+            setItems(snapshot); // draai de optimistische verwijdering terug
+            setDeleteError(message); // toon de ECHTE servermelding (bv. "in gebruik als component in …")
+          },
+        },
+        target.id,
+      );
     });
   }
 

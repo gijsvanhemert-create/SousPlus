@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { recordMeasurement } from "@/server/haccp/actions";
+import { runRecordMeasurement } from "@/lib/haccp-record";
 
 type Checkpoint = {
   id: string;
@@ -69,6 +70,9 @@ export function HaccpBoard({
   const [values, setValues] = useState<{ [id: string]: string }>({});
   const [isPending, startTransition] = useTransition();
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Fout bij vastleggen — per registratiepunt, zodat de chef precies bij de juiste
+  // rij ziet dat de meting NIET is opgeslagen (compliance-kritiek, was eerder stil).
+  const [errors, setErrors] = useState<{ [id: string]: string }>({});
 
   const today = new Date().toLocaleDateString("nl-NL");
   const todays = records.filter((r) => new Date(r.recordedAt).toLocaleDateString("nl-NL") === today);
@@ -83,16 +87,22 @@ export function HaccpBoard({
     const value = (values[checkpointId] ?? "").trim();
     if (!value || isPending) return;
     setActiveId(checkpointId);
+    setErrors((e) => ({ ...e, [checkpointId]: "" }));
     startTransition(async () => {
-      try {
-        const res = await recordMeasurement({ checkpointId, value });
-        setRecords((rs) => [res.record, ...rs]); // optimistisch; server revalideert
-        setValues((v) => ({ ...v, [checkpointId]: "" }));
-      } catch {
-        // laat de waarde staan; de server heeft niets vastgelegd
-      } finally {
-        setActiveId(null);
-      }
+      await runRecordMeasurement(
+        {
+          record: recordMeasurement,
+          onSuccess: (record) => {
+            setRecords((rs) => [record, ...rs]); // optimistisch; server revalideert
+            setValues((v) => ({ ...v, [checkpointId]: "" }));
+          },
+          // Laat de ingevoerde waarde staan (er is niets vastgelegd) én toon de
+          // echte oorzaak bij de rij, zodat de chef weet dat opnieuw invullen nodig is.
+          onError: (message) => setErrors((e) => ({ ...e, [checkpointId]: message })),
+        },
+        { checkpointId, value },
+      );
+      setActiveId(null);
     });
   }
 
@@ -138,8 +148,10 @@ export function HaccpBoard({
           {checkpoints.map((c) => {
             const latest = latestByCheckpoint.get(c.id);
             const busy = isPending && activeId === c.id;
+            const error = errors[c.id];
             return (
-              <div key={c.id} className="grid grid-cols-[2fr_1fr_1.4fr_0.7fr] items-center gap-3 border-b border-canvas px-5 py-3">
+              <div key={c.id} className="border-b border-canvas">
+              <div className="grid grid-cols-[2fr_1fr_1.4fr_0.7fr] items-center gap-3 px-5 py-3">
                 <span className="flex items-center gap-2 text-[14px] font-semibold">
                   <Thermometer size={15} className="text-muted" /> {c.zone}
                 </span>
@@ -178,6 +190,15 @@ export function HaccpBoard({
                     </span>
                   )}
                 </span>
+              </div>
+              {error && (
+                <div
+                  role="alert"
+                  className="flex items-center gap-1.5 px-5 pb-2.5 text-[12.5px] font-medium text-danger"
+                >
+                  <AlertTriangle size={13} className="shrink-0" /> {error}
+                </div>
+              )}
               </div>
             );
           })}
