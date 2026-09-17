@@ -14,6 +14,8 @@ export type MenuItem = {
   marginPct: number | null;
   foodcostPerCover: number;
   popularity: number;
+  // ISO-tijdstempel van de laatste handmatige populariteit-invoer; null = demo-/seed-data.
+  popularityUpdatedAt: string | null;
   favorite: boolean;
   versionLabel: string | null;
 };
@@ -46,6 +48,7 @@ export async function getMenuOverview(locationId: string): Promise<MenuItem[]> {
       marginPct,
       foodcostPerCover: fc !== null ? Number(fc.toFixed(2)) : 0,
       popularity: r.popularity,
+      popularityUpdatedAt: r.popularityUpdatedAt ? r.popularityUpdatedAt.toISOString() : null,
       favorite: r.favorite,
       versionLabel: v?.label ?? null,
     };

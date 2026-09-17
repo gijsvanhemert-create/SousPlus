@@ -77,7 +77,8 @@ model Recipe {
   dish          String // gerechtnaam
   category      String
   menuPrice     Decimal  @db.Decimal(10, 2)
-  popularity    Int      @default(0) // couverts p/m -> Menu Matrix
+  popularity    Int      @default(0) // couverts p/m -> Menu Matrix (handmatig ingevoerd, geen kassakoppeling)
+  popularityUpdatedAt DateTime? // wanneer 'popularity' handmatig is ingevuld; null = demo-/seed-data
   isOnMenu      Boolean  @default(true) // Recipe Library
   favorite      Boolean  @default(false)
   componentOnly Boolean  @default(false) // alleen sub-recept; verborgen uit menu-overzichten
