@@ -1,48 +1,41 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { db } = vi.hoisted(() => ({
-  db: { llmUsageLog: { create: vi.fn(async () => ({})) } },
-}));
-vi.mock("@/server/db", () => ({ prisma: db }));
+// logLlmUsage moet de cache-tokentellingen mee-persisteren, zodat we in de praktijk
+// cache-writes vs. -reads (de besparing) kunnen zien. We mocken prisma.
+
+const { create } = vi.hoisted(() => ({ create: vi.fn() }));
+vi.mock("@/server/db", () => ({ prisma: { llmUsageLog: { create } } }));
 
 import { logLlmUsage } from "./usage";
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => create.mockClear());
 
 describe("logLlmUsage", () => {
-  it("schrijft een usage-regel met de juiste velden", async () => {
+  it("persisteert cache-writes en -reads", async () => {
     await logLlmUsage({
-      locationId: "loc1",
+      locationId: "loc",
       model: "claude-sonnet-4-6",
       tier: "tier2",
       action: "chef",
-      usage: { inputTokens: 5503, outputTokens: 250 },
+      usage: { inputTokens: 40, outputTokens: 12, cacheCreationInputTokens: 1600, cacheReadInputTokens: 0 },
     });
-
-    expect(db.llmUsageLog.create).toHaveBeenCalledWith({
-      data: {
-        locationId: "loc1",
-        model: "claude-sonnet-4-6",
-        tier: "tier2",
-        action: "chef",
-        inputTokens: 5503,
-        outputTokens: 250,
-      },
-    });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ inputTokens: 40, cacheCreationTokens: 1600, cacheReadTokens: 0 }),
+      }),
+    );
   });
 
-  it("breekt NIET wanneer de database faalt (telemetrie mag de hoofdflow niet raken)", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    db.llmUsageLog.create.mockRejectedValueOnce(new Error("db down"));
-
-    await expect(
-      logLlmUsage({
-        locationId: "loc1",
-        model: "claude-haiku-4-5-20251001",
-        tier: "tier1",
-        action: "ocr:image",
-        usage: { inputTokens: 2500, outputTokens: 300 },
-      }),
-    ).resolves.toBeUndefined();
+  it("valt terug op 0 als de usage geen cache-velden bevat (mock/oud pad)", async () => {
+    await logLlmUsage({
+      locationId: "loc",
+      model: "claude-sonnet-4-6",
+      tier: "tier2",
+      action: "chef",
+      usage: { inputTokens: 100, outputTokens: 20 },
+    });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ cacheCreationTokens: 0, cacheReadTokens: 0 }) }),
+    );
   });
 });

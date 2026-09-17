@@ -101,6 +101,20 @@ export class IntelligentRouter {
   // logLlmUsage vangt fouten zelf op — dit kan de hoofdflow niet breken.
   private async recordUsage(tier: Tier, model: string, locationId: string, action: string | undefined, res: LlmResponse) {
     if (!res.usage) return;
+    // Korte cache-samenvatting in de serverlogs: cacheRead > 0 = echte hit
+    // (besparing); alleen cacheCreation = write-only (nog geen besparing).
+    console.log(
+      JSON.stringify({
+        at: "llm.usage",
+        tier,
+        model,
+        action: action ?? tier,
+        inputTokens: res.usage.inputTokens,
+        outputTokens: res.usage.outputTokens,
+        cacheCreationTokens: res.usage.cacheCreationInputTokens ?? 0,
+        cacheReadTokens: res.usage.cacheReadInputTokens ?? 0,
+      }),
+    );
     await logLlmUsage({ locationId, model, tier, action: action ?? tier, usage: res.usage });
   }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Decimal } from "decimal.js";
-import { buildMenuContext, buildFlavorContext, type CtxRecipe } from "./chef";
+import { buildMenuContext, buildFlavorContext, buildSystem, type CtxRecipe } from "./chef";
 import type { VersionCost } from "@/lib/component-cost";
 
 // Kostenkaart zoals getVersionCostMap die levert (component-inclusief). Standaard
@@ -85,6 +85,34 @@ describe("buildMenuContext", () => {
     expect(item.activeVersion).toBeNull();
     expect(item.marginPct).toBeNull();
     expect(item.versions).toEqual([]);
+  });
+});
+
+describe("buildSystem — prompt-cache-splitsing", () => {
+  const context = { menu: [], alerts: [], flavor: {} };
+
+  it("levert twee blokken: stabiel (met cache-breakpoint) + dynamische APP-CONTEXT", () => {
+    const blocks = buildSystem(context);
+    expect(blocks).toHaveLength(2);
+
+    // Blok 0: het stabiele persona/tool-deel met cache=true, ZONDER de context.
+    expect(blocks[0].cache).toBe(true);
+    expect(blocks[0].text).toContain("Je bent Chef Auguste");
+    expect(blocks[0].text).not.toContain("APP-CONTEXT (JSON)");
+
+    // Blok 1: het dynamische deel met de context-JSON, ZONDER cache-breakpoint.
+    expect(blocks[1].cache).toBeUndefined();
+    expect(blocks[1].text).toContain("APP-CONTEXT (JSON):");
+    expect(blocks[1].text).toContain(JSON.stringify(context));
+  });
+
+  it("houdt het stabiele blok constant terwijl de context wisselt (cache-vriendelijk)", () => {
+    const a = buildSystem({ menu: [{ dish: "A" }] });
+    const b = buildSystem({ menu: [{ dish: "B" }] });
+    // Het gecachte prefix mag NIET meebewegen met de context, anders geen hits.
+    expect(a[0].text).toBe(b[0].text);
+    // Het dynamische blok verschilt juist wél.
+    expect(a[1].text).not.toBe(b[1].text);
   });
 });
 

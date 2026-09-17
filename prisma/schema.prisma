@@ -213,8 +213,10 @@ model LlmUsageLog {
   model        String // bv. "claude-sonnet-4-6"
   tier         String // "tier1" | "tier2"
   action       String // "chef" | "ocr:text" | "ocr:image" | "ocr:pdf"
-  inputTokens  Int
+  inputTokens  Int // niet-gecachte input (bij caching exclusief cache-reads/-writes)
   outputTokens Int
+  cacheCreationTokens Int @default(0) // tokens naar de prompt-cache geschreven (~1.25×)
+  cacheReadTokens     Int @default(0) // tokens uit de prompt-cache gelezen (~0.1×) = de besparing
   createdAt    DateTime @default(now())
 
   @@index([locationId, createdAt])
