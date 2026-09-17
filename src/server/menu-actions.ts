@@ -46,6 +46,32 @@ export async function setComponentOnly(input: { recipeId: string; value: boolean
   revalidatePath("/lab");
 }
 
+// Handmatige invoer van het verkoopvolume (couverts per maand) voor de Menu
+// Matrix — een eerlijk tussenstation tot er een echte kassakoppeling is. Zet naast
+// de waarde ook popularityUpdatedAt = nu, zodat verouderde data zichtbaar is als
+// verouderd. Locatie-gescopet; niet-negatief geheel getal met een redelijke bovengrens.
+const popularitySchema = z.object({
+  recipeId: z.string().min(1),
+  coversPerMonth: z.number().int().min(0).max(100_000),
+});
+
+export async function updatePopularity(input: { recipeId: string; coversPerMonth: number }) {
+  const { locationId } = await getTenant();
+  const { recipeId, coversPerMonth } = popularitySchema.parse(input);
+
+  const recipe = await prisma.recipe.findFirst({
+    where: { id: recipeId, locationId },
+    select: { id: true },
+  });
+  if (!recipe) throw new Error("Recept niet gevonden in deze locatie.");
+
+  await prisma.recipe.update({
+    where: { id: recipeId },
+    data: { popularity: coversPerMonth, popularityUpdatedAt: new Date() },
+  });
+  revalidatePath("/matrix");
+}
+
 // Verwijder een recept volledig uit de bibliotheek (locatie-gescopet). Dit raakt
 // ook alle receptversies en hun ingrediënten: die gaan mee via ON DELETE CASCADE
 // (RecipeVersion.recipeId → Recipe, RecipeIngredient.versionId → RecipeVersion).

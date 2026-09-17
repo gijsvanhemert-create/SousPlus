@@ -1,9 +1,12 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Wand2 } from "lucide-react";
+import { Wand2, Pencil } from "lucide-react";
 import { pct } from "@/lib/format";
 import type { MenuItem } from "@/server/menu";
+import { updatePopularity } from "@/server/menu-actions";
+import { popularityFreshness, type PopularityFreshness } from "@/lib/popularity";
 import {
   MATRIX,
   X0,
@@ -71,9 +74,12 @@ export function MenuMatrix({ items }: { items: MenuItem[] }) {
 
   return (
     <div className="max-w-[920px]">
-      <p className="mb-5 mt-0 max-w-[560px] text-[14.5px] leading-relaxed text-ink">
+      <p className="mb-2 mt-0 max-w-[560px] text-[14.5px] leading-relaxed text-ink">
         Menu-engineering volgens de Boston-matrix: elk gerecht uitgezet op populariteit (couverts p/m) tegen marge. Zo
         zie je vóór de service welke gerechten dragen, welke verlies lekken en welke aandacht nodig hebben.
+      </p>
+      <p className="mb-5 flex items-center gap-1.5 text-[12px] text-muted">
+        <Pencil size={11} /> Populariteit is handmatig ingevoerd — geen kassakoppeling. Werk het bij in de tabel hieronder.
       </p>
 
       <div className="grid items-start gap-5 min-[760px]:grid-cols-[minmax(0,1.5fr)_minmax(220px,1fr)]">
@@ -151,6 +157,108 @@ export function MenuMatrix({ items }: { items: MenuItem[] }) {
             <>De kaart staat gezond: geen gerecht lekt marge in het werkpaarden-kwadrant. Houd de sterren zichtbaar.</>
           )}
         </div>
+      </div>
+
+      <PopularityPanel items={items} />
+    </div>
+  );
+}
+
+// Kleur + tekst per verouderd-niveau. Oplopend: neutraal → zacht (goud) → dringend
+// (rood). "demo" markeert seed-/demo-data die nog nooit handmatig is ingevuld.
+const FRESH_META: Record<PopularityFreshness, { dot: string; cls: string; label: (iso: string | null) => string }> = {
+  demo: { dot: MUTED, cls: "text-muted italic", label: () => "demo-data" },
+  fresh: { dot: COL.star, cls: "text-muted", label: (iso) => `bijgewerkt ${fmtDate(iso)}` },
+  aging: { dot: COL.plow, cls: "text-gold-deep", label: (iso) => `verouderend · ${fmtDate(iso)}` },
+  stale: { dot: COL.dog, cls: "text-danger font-semibold", label: (iso) => `sterk verouderd · ${fmtDate(iso)}` },
+};
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
+}
+
+// Handmatige invoer van het verkoopvolume (couverts/maand) per gerecht. Slaat op
+// via de server-action; de revalidatie ververst de prop, dus we wissen de lokale
+// edit na een succesvolle opslag en tonen dan de nieuwe (opgeslagen) waarde.
+function PopularityPanel({ items }: { items: MenuItem[] }) {
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+  const now = new Date();
+
+  function clearEdit(id: string) {
+    setEdits((e) => {
+      const next = { ...e };
+      delete next[id];
+      return next;
+    });
+  }
+
+  function save(id: string, current: number) {
+    const raw = edits[id];
+    if (raw === undefined) return; // niets gewijzigd
+    const n = Number(raw);
+    // Ongeldig of ongewijzigd: verwerp de lokale edit en toon de opgeslagen waarde.
+    if (!Number.isInteger(n) || n < 0 || n === current) {
+      clearEdit(id);
+      return;
+    }
+    setSavingId(id);
+    startTransition(async () => {
+      try {
+        await updatePopularity({ recipeId: id, coversPerMonth: n });
+        clearEdit(id); // prop-sync toont nu de nieuwe waarde + verse tijdstempel
+      } finally {
+        setSavingId(null);
+      }
+    });
+  }
+
+  return (
+    <div className="mt-5 rounded-[18px] border border-line bg-card p-4">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <span className="font-serif text-base font-semibold">Verkoopvolume per gerecht</span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-canvas px-2.5 py-1 text-[11px] font-semibold text-muted">
+          <Pencil size={11} /> Handmatig ingevoerd — geen kassakoppeling
+        </span>
+      </div>
+      <p className="mb-3 text-[12.5px] leading-snug text-muted">
+        Couverts per maand, met de hand bijgehouden tot er een kassakoppeling is. Verouderde cijfers worden gemarkeerd.
+      </p>
+
+      <div className="flex flex-col">
+        {items.map((it) => {
+          const value = edits[it.id] ?? String(it.popularity);
+          const meta = FRESH_META[popularityFreshness(it.popularityUpdatedAt, now)];
+          return (
+            <div key={it.id} className="flex items-center gap-3 border-t border-canvas py-2 first:border-t-0">
+              <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink">{it.dish}</span>
+              <span className="flex shrink-0 items-center gap-1.5 text-[11.5px]">
+                <span className="size-2 shrink-0 rounded-full" style={{ background: meta.dot }} />
+                <span className={meta.cls}>{meta.label(it.popularityUpdatedAt)}</span>
+              </span>
+              <span className="flex shrink-0 items-center gap-1">
+                <input
+                  value={value}
+                  onChange={(e) => setEdits((s) => ({ ...s, [it.id]: e.target.value }))}
+                  onBlur={() => save(it.id, it.popularity)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
+                  inputMode="numeric"
+                  aria-label={`couverts per maand ${it.dish}`}
+                  disabled={savingId === it.id}
+                  className="w-[64px] rounded-lg border border-line bg-canvas px-2 py-1 text-right text-[13px] text-charcoal tabular-nums disabled:opacity-60"
+                />
+                <span className="w-9 text-[11px] text-muted">/mnd</span>
+              </span>
+            </div>
+          );
+        })}
+        {items.length === 0 && (
+          <div className="py-4 text-center text-[13px] text-muted">Nog geen gerechten op de kaart.</div>
+        )}
       </div>
     </div>
   );
