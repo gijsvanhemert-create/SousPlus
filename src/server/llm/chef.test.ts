@@ -3,12 +3,15 @@ import { Decimal } from "decimal.js";
 import { buildMenuContext, buildFlavorContext, type CtxRecipe } from "./chef";
 import type { VersionCost } from "@/lib/component-cost";
 
-// Kostenkaart zoals getVersionCostMap die levert (component-inclusief).
-function costMap(entries: Record<string, string>): Map<string, VersionCost> {
+// Kostenkaart zoals getVersionCostMap die levert (component-inclusief). Standaard
+// volledig geprijsd; geef een id op in `incomplete` om die versie als onvolledig
+// (ongeprijsd ingrediënt) te markeren — dan is `foodcostPerServing` een PARTIËLE
+// waarde die niet als volledige kostprijs mag worden gebruikt.
+function costMap(entries: Record<string, string>, incomplete: string[] = []): Map<string, VersionCost> {
   return new Map(
     Object.entries(entries).map(([id, fc]) => [
       id,
-      { foodcostPerServing: new Decimal(fc), unitCost: new Decimal(fc) },
+      { foodcostPerServing: new Decimal(fc), unitCost: new Decimal(fc), priceComplete: !incomplete.includes(id) },
     ]),
   );
 }
@@ -58,6 +61,22 @@ describe("buildMenuContext", () => {
     const [item] = buildMenuContext([salmon], costMap({ ver_salmon_v12: "5.00" }));
     expect(item.foodcostPerCover).toBe(5);
     expect(item.marginPct).toBe(82.1); // (28 − 5)/28 × 100
+  });
+
+  it("geeft GEEN (partieel) percentage bij een onvolledig geprijsd recept", () => {
+    // De kostenkaart heeft een partiële foodcost (€1,50 over alleen de bekende
+    // ingrediënten) maar priceComplete=false. buildMenuContext mag daar NOOIT een
+    // schijnbaar-precies margegetal van maken — foodcost én marge worden null.
+    const [item] = buildMenuContext([salmon], costMap({ ver_salmon_v12: "1.50" }, ["ver_salmon_v12"]));
+    expect(item.foodcostComplete).toBe(false);
+    expect(item.marginPct).toBeNull();
+    expect(item.foodcostPerCover).toBeNull();
+  });
+
+  it("markeert een volledig geprijsd recept als foodcostComplete", () => {
+    const [item] = buildMenuContext([salmon], costMap({ ver_salmon_v12: "3.6" }));
+    expect(item.foodcostComplete).toBe(true);
+    expect(item.marginPct).toBe(87.1);
   });
 
   it("geeft null-marge en een lege versielijst voor een recept zonder versies", () => {

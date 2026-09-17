@@ -60,7 +60,11 @@ const ING_JSON = {
           "Hoeveelheid per couvert in GRAM (weight) of ml (volume), NIET in kg/L. Reken de catalogus-eenheid om: 0,08 kg = 80.",
       },
       unit: { type: "string", description: 'Alleen "g" of "ml" (weight), of een stukseenheid (piece). Nooit de catalogus-eenheid kg/L.' },
-      p: { type: "number", description: "Inkoopprijs per kg/L (weight) of per stuk (piece), zoals in de catalogus." },
+      p: {
+        type: "number",
+        description:
+          "Inkoopprijs per kg/L (weight) of per stuk (piece), zoals in de catalogus. LAAT DIT VELD WEG als het ingrediënt niet in de catalogus staat en je de echte prijs niet kent — de prijs is dan 'onbekend'. Verzin NOOIT een prijs en vul NOOIT 0 in om het veld te vullen.",
+      },
       mode: { type: "string", enum: ["weight", "piece"] },
     },
   },
@@ -71,7 +75,9 @@ const ingredientZod = z.array(
     name: z.string().min(1),
     g: z.number().nonnegative(),
     unit: z.string().optional(),
-    p: z.number().nonnegative(),
+    // p weglaten (of null) = prijs onbekend: het ingrediënt staat nog niet in de
+    // catalogus. De motor behandelt dit nooit als €0; de foodcost wordt onvolledig.
+    p: z.number().nonnegative().nullish(),
     mode: z.enum(["weight", "piece"]).optional(),
   }),
 );
@@ -90,8 +96,29 @@ function toIngredientCreate(i: IngredientInput) {
     amount: i.g.toString(),
     unit: isPiece ? (i.unit?.trim() || "stuk") : normalizeWeightUnit(i.unit),
     mode: isPiece ? CostMode.PIECE : CostMode.WEIGHT,
-    pricePerUnit: i.p.toString(),
+    // p weggelaten/null ⇒ prijs onbekend (NULL), nooit stilzwijgend €0.
+    pricePerUnit: i.p == null ? null : i.p.toString(),
   };
+}
+
+/** Namen van ingrediënten zonder bekende prijs (p weggelaten/null). */
+function unpricedNames(ingredients?: IngredientInput[]): string[] {
+  return (ingredients ?? []).filter((i) => i.p == null).map((i) => i.name);
+}
+
+/**
+ * Transparantie-nootje voor het tool-resultaat: benoemt ongeprijsde ingrediënten
+ * zodat Chef Auguste dit expliciet aan de chef meldt (nooit stilzwijgend opslaan
+ * alsof de kostprijs compleet is). Lege string als alles geprijsd is.
+ */
+function unpricedNote(ingredients?: IngredientInput[]): string {
+  const names = unpricedNames(ingredients);
+  if (names.length === 0) return "";
+  const lijst = names.join(", ");
+  return (
+    ` LET OP: ${lijst} ${names.length === 1 ? "staat" : "staan"} nog niet in de catalogus, dus de prijs is onbekend — ` +
+    "de foodcost en marge zijn daardoor onvolledig tot de chef de prijs invult in de Recipe Lab. Meld dit expliciet."
+  );
 }
 
 // --- search_ingredients ------------------------------------------------------
@@ -272,7 +299,7 @@ const saveTool: ChefTool = {
       }
       const href = `/lab?recipe=${encodeURIComponent(recipeId)}`;
       return {
-        text: `Opgeslagen als ${label} · ${d.name} en gekoppeld als component.`,
+        text: `Opgeslagen als ${label} · ${d.name} en gekoppeld als component.` + unpricedNote(d.ingredients),
         action: { kind: "recipe", label: `Component gekoppeld: ${d.name}`, href },
       };
     }
@@ -280,7 +307,7 @@ const saveTool: ChefTool = {
     // Open in de Lab exact het zojuist opgeslagen recept (niet het standaardgerecht).
     const href = `/lab?recipe=${encodeURIComponent(recipeId)}`;
     return {
-      text: `Opgeslagen als ${label} · ${d.name}.`,
+      text: `Opgeslagen als ${label} · ${d.name}.` + unpricedNote(d.ingredients),
       // Geen automatische navigatie: de gebruiker springt zelf via de knop.
       action: { kind: "recipe", label: `Opgeslagen: ${label} · ${d.name}`, href },
     };
@@ -352,7 +379,7 @@ const updateTool: ChefTool = {
     // Open in de Lab exact het zojuist bewerkte recept (niet het standaardgerecht).
     const href = `/lab?recipe=${encodeURIComponent(version.recipeId)}`;
     return {
-      text: "Receptversie bijgewerkt.",
+      text: "Receptversie bijgewerkt." + unpricedNote(d.ingredients),
       // Geen automatische navigatie: de gebruiker springt zelf via de knop.
       action: { kind: "recipe", label: "Receptversie bijgewerkt", href },
     };

@@ -17,7 +17,6 @@ import { ingredientCost, toDecimal, type CostIngredient, type DecimalInput, type
 export const MAX_COMPONENT_DEPTH = 4;
 
 const ZERO = new Decimal(0);
-const ONE = new Decimal(1);
 
 export type ComponentRef = {
   childVersionId: string;
@@ -36,6 +35,13 @@ export type VersionCost = {
   foodcostPerServing: Decimal;
   /** Kost per basiseenheid (g/ml/portie): foodcostPerServing / yieldQty. */
   unitCost: Decimal;
+  /**
+   * `false` zodra deze versie (of transitief een sub-component) een ingrediënt
+   * zonder bekende prijs bevat. `foodcostPerServing`/`unitCost` zijn dan een
+   * PARTIËLE waarde (de ongeprijsde regels dragen 0 bij) en mogen niet als
+   * volledige kostprijs worden getoond — consulteer eerst dit vlag.
+   */
+  priceComplete: boolean;
 };
 
 export type ComponentCostOptions = {
@@ -57,38 +63,63 @@ export function computeVersionCosts(
   const byId = new Map(versions.map((v) => [v.id, v]));
   const memo = new Map<string, VersionCost>();
 
-  function servingCost(versionId: string, stack: Set<string>, depth: number): Decimal {
+  // Structurele randgevallen (ontbrekende versie / cyclus / te diep) dragen 0 bij
+  // en gelden als "compleet" — dat zijn geen prijs-onbekend-gevallen, maar aparte
+  // problemen die elders worden afgevangen.
+  const EMPTY: VersionCost = { foodcostPerServing: ZERO, unitCost: ZERO, priceComplete: true };
+
+  function compute(versionId: string, stack: Set<string>, depth: number): VersionCost {
     const node = byId.get(versionId);
-    if (!node) return ZERO; // ontbrekende versie
+    if (!node) return EMPTY; // ontbrekende versie
     const cached = memo.get(versionId);
-    if (cached) return cached.foodcostPerServing;
-    if (stack.has(versionId) || depth > maxDepth) return ZERO; // cycle / te diep
+    if (cached) return cached;
+    if (stack.has(versionId) || depth > maxDepth) return EMPTY; // cycle / te diep
 
     const nextStack = new Set(stack).add(versionId);
-    let total = node.ingredients.reduce((sum, ing) => sum.add(ingredientCost(ing, options.overrides)), ZERO);
+    let total = ZERO;
+    let priceComplete = true;
+
+    // Ongeprijsde ingrediënten dragen 0 bij aan het (partiële) getal, maar zetten
+    // priceComplete op false zodat consumers de waarde niet als volledig lezen.
+    for (const ing of node.ingredients) {
+      const c = ingredientCost(ing, options.overrides);
+      if (c === null) {
+        priceComplete = false;
+        continue;
+      }
+      total = total.add(c);
+    }
 
     for (const comp of node.components) {
-      const childServing = servingCost(comp.childVersionId, nextStack, depth + 1);
-      const child = byId.get(comp.childVersionId);
-      const childYield = child ? toDecimal(child.yieldQty) : ONE;
-      const childUnit = childYield.isZero() ? ZERO : childServing.div(childYield);
-      total = total.add(toDecimal(comp.amount).mul(childUnit));
+      const child = compute(comp.childVersionId, nextStack, depth + 1);
+      if (!child.priceComplete) priceComplete = false;
+      total = total.add(toDecimal(comp.amount).mul(child.unitCost));
     }
 
     const yieldQty = toDecimal(node.yieldQty);
     const result: VersionCost = {
       foodcostPerServing: total,
       unitCost: yieldQty.isZero() ? ZERO : total.div(yieldQty),
+      priceComplete,
     };
     memo.set(versionId, result);
-    return total;
+    return result;
   }
 
-  for (const v of versions) servingCost(v.id, new Set(), 0);
+  for (const v of versions) compute(v.id, new Set(), 0);
   return memo;
 }
 
 /** Kost per basiseenheid van een component, gepind op childVersionId (0 indien onbekend). */
 export function unitCostFor(costs: Map<string, VersionCost>, childVersionId: string): Decimal {
   return costs.get(childVersionId)?.unitCost ?? ZERO;
+}
+
+/**
+ * Is de kostprijs van deze versie volledig geprijsd? `false` als de versie (of
+ * transitief een sub-component) een ingrediënt zonder bekende prijs bevat.
+ * Een onbekende versie geldt als "compleet" (geen prijsprobleem, ander vangnet).
+ */
+export function isVersionPriceComplete(costs: Map<string, VersionCost>, childVersionId: string): boolean {
+  return costs.get(childVersionId)?.priceComplete ?? true;
 }

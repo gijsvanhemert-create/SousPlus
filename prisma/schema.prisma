@@ -153,7 +153,7 @@ model RecipeIngredient {
   amount        Decimal       @db.Decimal(10, 3) // gram/ml (WEIGHT) of aantal (PIECE)
   unit          String // g, ml, stuk, fles, ...
   mode          CostMode      @default(WEIGHT)
-  pricePerUnit  Decimal       @db.Decimal(10, 2) // snapshot; live prijs via CatalogItem/IngredientPrice
+  pricePerUnit  Decimal?      @db.Decimal(10, 2) // snapshot; NULL = prijs onbekend (ingrediënt nog niet in catalogus). Live prijs via CatalogItem/IngredientPrice
 
   @@index([versionId])
 }

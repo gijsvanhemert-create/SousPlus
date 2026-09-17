@@ -9,9 +9,10 @@ import {
   toDecimal,
 } from "@/lib/cost";
 
-/** Handige assertie: vergelijk een Decimal op exacte waarde. */
-function expectDecimal(actual: Decimal, expected: string) {
-  expect(actual.equals(new Decimal(expected))).toBe(true);
+/** Handige assertie: vergelijk een Decimal op exacte waarde (en niet-null). */
+function expectDecimal(actual: Decimal | null, expected: string) {
+  expect(actual).not.toBeNull();
+  expect(actual!.equals(new Decimal(expected))).toBe(true);
 }
 
 // Miso-Glazed Salmon v1.2 (per couvert) — deterministische variant van het prototype.
@@ -70,6 +71,48 @@ describe("foodcost", () => {
 
   it("lege ingrediëntenlijst → 0", () => {
     expectDecimal(foodcost([]), "0");
+  });
+
+  it("één ongeprijsd ingrediënt maakt de hele foodcost onbekend (null, NOOIT €0)", () => {
+    const items: CostIngredient[] = [
+      { name: "Zalmfilet", amount: 150, mode: "WEIGHT", pricePerUnit: "38.50" },
+      { name: "Nieuw kruid", amount: 5, mode: "WEIGHT", pricePerUnit: null }, // onbekend
+    ];
+    // Zou 5,775 zijn als de onbekende regel als 0 werd meegeteld — dat mag NIET.
+    expect(foodcost(items)).toBeNull();
+  });
+});
+
+describe("prijs onbekend (null pricePerUnit)", () => {
+  it("ingredientCost geeft null i.p.v. een (te lage) waarde", () => {
+    expect(ingredientCost({ name: "x", amount: 100, mode: "WEIGHT", pricePerUnit: null })).toBeNull();
+  });
+
+  it("een prijs-override maakt een onbekende prijs alsnog bekend", () => {
+    const ing: CostIngredient = { catalogItemId: "butter", amount: 15, mode: "WEIGHT", pricePerUnit: null };
+    // Zonder override: onbekend.
+    expect(ingredientCost(ing)).toBeNull();
+    // Met override op het catalogItemId: gewoon berekend.
+    expectDecimal(ingredientCost(ing, { butter: "10.26" }), "0.1539");
+  });
+
+  it("recipeCost werpt bij een onvolledige foodcost (marge niet bepaalbaar)", () => {
+    expect(() =>
+      recipeCost({
+        menuPrice: "22.80",
+        ingredients: [{ name: "Nieuw kruid", amount: 5, mode: "WEIGHT", pricePerUnit: null }],
+      }),
+    ).toThrow(/onvolledig/i);
+  });
+
+  it("recipeCost werpt óók als een component-kost onbekend is", () => {
+    expect(() =>
+      recipeCost({
+        menuPrice: "22.80",
+        ingredients: salmon,
+        components: [{ amount: 50, unitCost: null }],
+      }),
+    ).toThrow(/onvolledig/i);
   });
 });
 

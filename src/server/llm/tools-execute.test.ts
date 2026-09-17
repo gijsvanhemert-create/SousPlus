@@ -21,6 +21,7 @@ const { store, mocks } = vi.hoisted(() => {
     versionUpdate: vi.fn(),
     recipeUpdate: vi.fn(),
     alertUpdate: vi.fn(),
+    versionCreate: vi.fn(),
   };
   return { store, mocks };
 });
@@ -39,8 +40,17 @@ vi.mock("@/server/db", () => ({
         if (v) Object.assign(v, data);
         return v;
       }),
+      count: vi.fn(async () => store.versions.length),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        mocks.versionCreate({ data });
+        return { id: "ver_new", recipeId: data.recipeId };
+      }),
     },
     recipe: {
+      findFirst: vi.fn(async ({ where }: { where: { id: string; locationId: string } }) => {
+        const r = store.recipes.find((x) => x.id === where.id && x.locationId === where.locationId);
+        return r ? { id: r.id } : null;
+      }),
       update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
         mocks.recipeUpdate({ where, data });
         const r = store.recipes.find((x) => x.id === where.id);
@@ -90,6 +100,7 @@ beforeEach(() => {
   mocks.versionUpdate.mockClear();
   mocks.recipeUpdate.mockClear();
   mocks.alertUpdate.mockClear();
+  mocks.versionCreate.mockClear();
 });
 
 describe("update_recipe_version.execute", () => {
@@ -168,5 +179,43 @@ describe("resolve_margin_alert.execute", () => {
       tool.execute({ alertId: "alert_boter", resolution: "iets" }, { locationId: LOC_B, userId: "u1" }),
     ).rejects.toThrow(/niet gevonden/i);
     expect(mocks.alertUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("save_recipe_version.execute — ongeprijsd ingrediënt", () => {
+  const tool = TOOL_BY_NAME.get("save_recipe_version")!;
+
+  it("slaat een ingrediënt zonder p op als pricePerUnit null (nooit €0) en meldt het", async () => {
+    const outcome = await tool.execute(
+      {
+        recipeId: "rec_salmon",
+        name: "Zomervariant",
+        ingredients: [
+          { name: "Zalmfilet", g: 150, p: 38.5 },
+          { name: "Wilde tijm (nieuw)", g: 5 }, // p weggelaten = prijs onbekend
+        ],
+      },
+      { locationId: LOC_A, userId: "u1" },
+    );
+
+    // De aangemaakte versie krijgt het ongeprijsde ingrediënt als pricePerUnit null.
+    const created = mocks.versionCreate.mock.calls[0][0] as {
+      data: { ingredients: { create: { name: string; pricePerUnit: string | null }[] } };
+    };
+    const rows = created.data.ingredients.create;
+    expect(rows.find((r) => r.name === "Zalmfilet")?.pricePerUnit).toBe("38.5");
+    expect(rows.find((r) => r.name === "Wilde tijm (nieuw)")?.pricePerUnit).toBeNull();
+
+    // En het resultaat wijst Auguste er expliciet op (transparantie).
+    expect(outcome.text).toMatch(/LET OP/);
+    expect(outcome.text).toContain("Wilde tijm (nieuw)");
+  });
+
+  it("meldt niets bijzonders als alle ingrediënten geprijsd zijn", async () => {
+    const outcome = await tool.execute(
+      { recipeId: "rec_salmon", name: "Compleet", ingredients: [{ name: "Zalmfilet", g: 150, p: 38.5 }] },
+      { locationId: LOC_A, userId: "u1" },
+    );
+    expect(outcome.text).not.toMatch(/LET OP/);
   });
 });

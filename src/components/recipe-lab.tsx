@@ -23,7 +23,7 @@ import {
 import { Decimal } from "decimal.js";
 import { eur, pct } from "@/lib/format";
 import { ingredientCost, recipeFoodcost } from "@/lib/cost";
-import { computeVersionCosts, unitCostFor, type CostVersionNode } from "@/lib/component-cost";
+import { computeVersionCosts, unitCostFor, isVersionPriceComplete, type CostVersionNode } from "@/lib/component-cost";
 import { marginTextClass, marginApplies } from "@/lib/margin";
 import type { LabRecipe, LabVersion, CatalogResult, CandidateRecipe } from "@/types/recipe";
 import {
@@ -142,19 +142,31 @@ export function RecipeLab({
         mode: i.mode,
         pricePerUnit: i.pricePerUnit,
       })),
-      // Componenten tellen mee via hun (recursief bepaalde) kost per eenheid.
+      // Componenten tellen mee via hun (recursief bepaalde) kost per eenheid;
+      // een prijs-onvolledige component geeft unitCost null → propageert.
       components: version.components.map((c) => ({
         amount: sanitize(c.amount),
-        unitCost: unitCostFor(versionCosts, c.childVersionId),
+        unitCost: isVersionPriceComplete(versionCosts, c.childVersionId)
+          ? unitCostFor(versionCosts, c.childVersionId)
+          : null,
       })),
     });
+    // foodcost null = één of meer ingrediënten zonder bekende prijs → foodcost en
+    // marge zijn onvolledig; toon geen vals-precies getal en géén (rode) marge.
+    const complete = foodcostPerCover !== null;
     // Marge is n.v.t. voor alleen-component (sub-)recepten — ongeacht welke
     // menuPrice er toevallig is opgeslagen — en zonder positieve prijs.
     const price = new Decimal(sanitize(recipe.menuPrice));
-    const marginPct = marginApplies(recipe.componentOnly, price.toNumber())
-      ? price.sub(foodcostPerCover).div(price).mul(100)
-      : null;
-    return { foodcostPerCover, foodcostTotal: foodcostPerCover.mul(covers), marginPct };
+    const marginPct =
+      complete && marginApplies(recipe.componentOnly, price.toNumber())
+        ? price.sub(foodcostPerCover).div(price).mul(100)
+        : null;
+    return {
+      foodcostPerCover,
+      foodcostTotal: complete ? foodcostPerCover.mul(covers) : null,
+      marginPct,
+      complete,
+    };
   }, [recipe, version, covers, versionCosts]);
 
   if (!recipe || !version || !costing) {
@@ -398,7 +410,11 @@ export function RecipeLab({
       >
         <StatChip label="Prep tijd" value={`${version.prepTimeMin} min`} />
         {!kitchenView && (
-          <StatChip label="Foodcost p.c." value={eur(costing.foodcostPerCover.toNumber())} testId="lab-foodcost" />
+          <StatChip
+            label="Foodcost p.c."
+            value={costing.complete ? eur(costing.foodcostPerCover!.toNumber()) : "onvolledig"}
+            testId="lab-foodcost"
+          />
         )}
         {!kitchenView && (
           <StatChip
@@ -535,13 +551,13 @@ export function RecipeLab({
 
             {version.ingredients.map((ing) => {
               const isPiece = ing.mode === "PIECE";
-              const lineCost = ingredientCost({
+              // null = prijs onbekend → regelkost "—" i.p.v. €0,00.
+              const lineCostDec = ingredientCost({
                 amount: sanitize(ing.amount),
                 mode: ing.mode,
                 pricePerUnit: ing.pricePerUnit,
-              })
-                .mul(covers)
-                .toNumber();
+              });
+              const lineCost = lineCostDec === null ? null : lineCostDec.mul(covers).toNumber();
               const totalDisp = fmtTotal(ing.amount, covers, ing.unit, isPiece);
               return (
                 <div
@@ -576,7 +592,7 @@ export function RecipeLab({
                     )}
                     {!kitchenView && (
                       <span className="w-[52px] text-right text-[12.5px] text-muted tabular-nums">
-                        {eur(lineCost)}
+                        {lineCost === null ? "—" : eur(lineCost)}
                       </span>
                     )}
                     {!kitchenView && (
@@ -611,7 +627,7 @@ export function RecipeLab({
               <div className="mt-4 flex items-center justify-between border-t border-line pt-3.5">
                 <span className="text-[13px] text-muted">Totale inkoop voor {covers} covers</span>
                 <span className="font-serif text-[22px] font-semibold">
-                  {eur(costing.foodcostTotal.toNumber())}
+                  {costing.foodcostTotal === null ? "onvolledig" : eur(costing.foodcostTotal.toNumber())}
                 </span>
               </div>
             )}

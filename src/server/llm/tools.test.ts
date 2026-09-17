@@ -45,6 +45,20 @@ describe("tool zod-validatie", () => {
     expect(zodFor("link_component").safeParse({}).success).toBe(false);
   });
 
+  it("save_recipe_version accepteert een ingrediënt ZONDER prijs (prijs onbekend)", () => {
+    // p weglaten is geldig = prijs onbekend; p mag ook expliciet null zijn.
+    expect(
+      zodFor("save_recipe_version").safeParse({ name: "v1", ingredients: [{ name: "Wilde tijm", g: 5 }] }).success,
+    ).toBe(true);
+    expect(
+      zodFor("save_recipe_version").safeParse({ name: "v1", ingredients: [{ name: "Wilde tijm", g: 5, p: null }] }).success,
+    ).toBe(true);
+    // Een negatieve prijs blijft ongeldig.
+    expect(
+      zodFor("save_recipe_version").safeParse({ name: "v1", ingredients: [{ name: "x", g: 5, p: -1 }] }).success,
+    ).toBe(false);
+  });
+
   it("save_recipe_version accepteert optioneel asComponentOf", () => {
     expect(zodFor("save_recipe_version").safeParse({ name: "Saus v1", dish: "Saus", asComponentOf: { parentRecipeId: "rec_x" } }).success).toBe(true);
     // asComponentOf zonder parentRecipeId is ongeldig.
