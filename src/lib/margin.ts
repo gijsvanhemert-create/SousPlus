@@ -14,6 +14,15 @@ export function marginApplies(componentOnly: boolean, menuPrice: number): boolea
   return !componentOnly && menuPrice > 0;
 }
 
+/**
+ * Namen van ingrediënten zonder bekende prijs (`pricePerUnit === null`). Voedt de
+ * "onvolledige kostprijs"-melding in de Recipe Lab, zodat de chef precies ziet
+ * welke ingrediënten hij nog moet prijzen.
+ */
+export function unpricedNames(ingredients: { name: string; pricePerUnit: string | null }[]): string[] {
+  return ingredients.filter((i) => i.pricePerUnit === null).map((i) => i.name);
+}
+
 /** Kritiek = er ís een marge én die ligt onder de grens. `null` is niet kritiek. */
 export function isMarginCriticalPct(marginPct: number | null, threshold = MARGIN_CRITICAL_PCT): boolean {
   return marginPct != null && marginPct < threshold;

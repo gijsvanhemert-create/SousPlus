@@ -19,12 +19,13 @@ import {
   Loader2,
   ChefHat,
   BadgeCheck,
+  AlertTriangle,
 } from "lucide-react";
 import { Decimal } from "decimal.js";
 import { eur, pct } from "@/lib/format";
 import { ingredientCost, recipeFoodcost } from "@/lib/cost";
 import { computeVersionCosts, unitCostFor, isVersionPriceComplete, type CostVersionNode } from "@/lib/component-cost";
-import { marginTextClass, marginApplies } from "@/lib/margin";
+import { marginTextClass, marginApplies, unpricedNames } from "@/lib/margin";
 import type { LabRecipe, LabVersion, CatalogResult, CandidateRecipe } from "@/types/recipe";
 import {
   updateIngredientAmount,
@@ -161,11 +162,19 @@ export function RecipeLab({
       complete && marginApplies(recipe.componentOnly, price.toNumber())
         ? price.sub(foodcostPerCover).div(price).mul(100)
         : null;
+    // Welke ingrediënten/sub-recepten missen een prijs — voor een expliciete
+    // melding (fase 3) en straks de inline-invulactie (fase 4).
+    const missingNames = unpricedNames(version.ingredients);
+    const componentIncomplete = version.components.some(
+      (c) => !isVersionPriceComplete(versionCosts, c.childVersionId),
+    );
     return {
       foodcostPerCover,
       foodcostTotal: complete ? foodcostPerCover.mul(covers) : null,
       marginPct,
       complete,
+      missingNames,
+      componentIncomplete,
     };
   }, [recipe, version, covers, versionCosts]);
 
@@ -419,7 +428,7 @@ export function RecipeLab({
         {!kitchenView && (
           <StatChip
             label="Marge"
-            value={marginPctNum != null ? pct(marginPctNum) : "n.v.t."}
+            value={!costing.complete ? "onvolledig" : marginPctNum != null ? pct(marginPctNum) : "n.v.t."}
             accent={marginTextClass(marginPctNum)}
             testId="lab-margin"
           />
@@ -430,6 +439,27 @@ export function RecipeLab({
       {kitchenView && (
         <div className="mb-[22px] flex items-center gap-2 rounded-xl border border-champagne bg-champagne-soft px-4 py-2.5 text-[12.5px] font-semibold text-gold-deep">
           <EyeOff size={15} /> Kitchen View actief — financiële data verborgen voor de pas.
+        </div>
+      )}
+
+      {!kitchenView && !costing.complete && (
+        <div
+          data-testid="lab-incomplete-notice"
+          className="mb-[22px] flex items-start gap-2 rounded-xl border border-champagne bg-champagne-soft px-4 py-2.5 text-[12.5px] leading-relaxed text-gold-deep"
+        >
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <div>
+            <span className="font-semibold">Onvolledige kostprijs.</span> Foodcost en marge zijn nog niet te bepalen zolang
+            een prijs ontbreekt
+            {costing.missingNames.length > 0 && (
+              <>
+                {" "}— zonder prijs:{" "}
+                <span className="font-semibold">{costing.missingNames.join(", ")}</span>
+              </>
+            )}
+            {costing.componentIncomplete && <> — en een sub-recept bevat een ongeprijsd ingrediënt</>}. Vul de inkoopprijs in
+            om de marge te berekenen.
+          </div>
         </div>
       )}
 
@@ -564,7 +594,17 @@ export function RecipeLab({
                   key={ing.id}
                   className="flex items-center justify-between gap-2 border-b border-canvas py-[9px]"
                 >
-                  <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink">{ing.name}</span>
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="truncate text-[13.5px] text-ink">{ing.name}</span>
+                    {!kitchenView && ing.pricePerUnit === null && (
+                      <span
+                        title="Prijs onbekend — dit ingrediënt staat nog niet in de catalogus."
+                        className="shrink-0 rounded-full bg-champagne-soft px-1.5 py-0.5 text-[10px] font-semibold text-gold-deep"
+                      >
+                        prijs onbekend
+                      </span>
+                    )}
+                  </div>
                   <div className="flex shrink-0 items-center gap-2.5">
                     {!kitchenView && (
                       <span className="flex items-center gap-1">
