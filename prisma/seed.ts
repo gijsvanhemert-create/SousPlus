@@ -15,7 +15,11 @@ const ssl = /sslmode=(require|no-verify)|supabase\.com/.test(connectionString ??
 const adapter = new PrismaPg({ connectionString, ssl });
 const prisma = new PrismaClient({ adapter });
 
-const DEMO_PASSWORD = "demo1234";
+// Wachtwoord voor de demo-users. Lokaal/e2e valt dit terug op "demo1234" (het
+// login-formulier vult die buiten productie voor). Voor een publiek bereikbare
+// seed (bv. de prod-DB) zet je SEED_DEMO_PASSWORD op iets sterks, zodat er nooit
+// een bekend wachtwoord op de live URL werkt.
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD ?? "demo1234";
 
 // --- CSV-catalogus -----------------------------------------------------------
 type CsvRow = {

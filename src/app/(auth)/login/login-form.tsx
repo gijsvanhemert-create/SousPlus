@@ -4,7 +4,7 @@ import { useActionState } from "react";
 import { Loader2, LogIn, Utensils } from "lucide-react";
 import { authenticate } from "./actions";
 
-export function LoginForm() {
+export function LoginForm({ showDemo = false }: { showDemo?: boolean }) {
   const [errorMessage, formAction, isPending] = useActionState(
     authenticate,
     undefined,
@@ -43,7 +43,7 @@ export function LoginForm() {
             type="email"
             required
             autoComplete="email"
-            defaultValue="mark@bistroplus.nl"
+            defaultValue={showDemo ? "mark@bistroplus.nl" : undefined}
             className="h-12 rounded-xl border border-line bg-card px-4 text-[15px] text-charcoal outline-none focus:border-gold focus:ring-2 focus:ring-champagne"
           />
         </label>
@@ -57,7 +57,7 @@ export function LoginForm() {
             type="password"
             required
             autoComplete="current-password"
-            defaultValue="demo1234"
+            defaultValue={showDemo ? "demo1234" : undefined}
             className="h-12 rounded-xl border border-line bg-card px-4 text-[15px] text-charcoal outline-none focus:border-gold focus:ring-2 focus:ring-champagne"
           />
         </label>
@@ -82,9 +82,11 @@ export function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-xs text-muted">
-        Demo-toegang · mark@bistroplus.nl / demo1234
-      </p>
+      {showDemo && (
+        <p className="mt-6 text-center text-xs text-muted">
+          Demo-toegang · mark@bistroplus.nl / demo1234
+        </p>
+      )}
     </div>
   );
 }
