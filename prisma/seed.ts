@@ -6,7 +6,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { Supplier, CostMode, Cmp } from "../src/generated/prisma/enums";
 
-const connectionString = process.env.DATABASE_URL;
+// DIRECT_URL gaat vóór DATABASE_URL: seed draait DDL/bulk-inserts, dus (net als
+// prisma.config.ts) willen we de directe/session-verbinding gebruiken als die er
+// is, niet de transaction-pooler die voor de serverless-runtime is bedoeld.
+const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 // Supabase pooler vereist TLS; de cert-chain valideren we niet in dev (pin de
 // Supabase-CA in productie). Zelfde aanpak als src/server/db.ts.
 const ssl = /sslmode=(require|no-verify)|supabase\.com/.test(connectionString ?? "")
