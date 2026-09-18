@@ -141,9 +141,6 @@ export function AppShell({
             </div>
           </div>
           <div className="flex items-center gap-3.5">
-            <div className="flex items-center gap-1.5 rounded-full bg-success-soft px-3 py-1.5 text-[12.5px] font-semibold text-success">
-              <span className="size-2 rounded-full bg-success" /> API Live
-            </div>
             <MarginWatchdog />
           </div>
         </header>
