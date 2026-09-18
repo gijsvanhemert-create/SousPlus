@@ -73,8 +73,40 @@ export function buildMenuContext(recipes: CtxRecipe[], costByVersion: Map<string
   });
 }
 
-async function buildContext(locationId: string) {
-  const [recipes, catalogCount, checkpoints, costMap, alerts] = await Promise.all([
+// Sub-recepten (componentOnly) horen NIET in `menu` — ze zijn geen los verkoopbaar
+// gerecht en mogen dus nooit in een menu- of margeanalyse meetellen. Toch moet
+// Auguste weten dát ze bestaan (met hun echte id's) om ze op verzoek te kunnen
+// bewerken. Daarom een aparte lijst met alleen naam + id's + waar ze gebruikt
+// worden — bewust GEEN menuPrice/marge, zodat het model ze niet als gerecht ziet.
+export type CtxComponent = {
+  id: string;
+  dish: string;
+  category: string;
+  // steps = de bereidingswijze van de actieve versie. Nodig om een component op
+  // verzoek te kunnen bewerken (bv. een kop toevoegen): zonder de huidige stappen
+  // zou het model ze moeten verzinnen, wat het (terecht) weigert.
+  activeVersion: { id: string; label: string; name: string; steps: string[] } | null;
+  versions: { id: string; label: string; name: string }[];
+  usedIn: string[]; // gerechten waarin dit component gebruikt wordt
+};
+
+export function buildComponentContext(components: CtxComponent[]) {
+  return components.map((c) => ({
+    recipeId: c.id,
+    dish: c.dish,
+    category: c.category,
+    // Expliciet gelabeld: dit is een sub-recept, geen los verkoopbaar gerecht.
+    isComponent: true,
+    usedIn: c.usedIn,
+    activeVersion: c.activeVersion
+      ? { id: c.activeVersion.id, label: c.activeVersion.label, name: c.activeVersion.name, steps: c.activeVersion.steps }
+      : null,
+    versions: c.versions.map((ver) => ({ id: ver.id, label: ver.label, name: ver.name })),
+  }));
+}
+
+export async function buildContext(locationId: string) {
+  const [recipes, components, catalogCount, checkpoints, costMap, alerts] = await Promise.all([
     prisma.recipe.findMany({
       // Sub-recepten (alleen-component) horen niet in het menu-overzicht dat
       // Auguste ziet; ze zijn alleen relevant als component van een gerecht.
@@ -84,6 +116,19 @@ async function buildContext(locationId: string) {
         versions: { select: { id: true, label: true, name: true }, orderBy: { createdAt: "asc" } },
       },
       orderBy: [{ favorite: "desc" }, { dish: "asc" }],
+    }),
+    prisma.recipe.findMany({
+      // De sub-recepten die uit `menu` worden gefilterd. Auguste moet ze wél kennen
+      // (naam + id's) om ze op expliciet verzoek te kunnen bewerken; ze komen in een
+      // apart `components`-blok en NOOIT in de margeanalyse.
+      where: { locationId, componentOnly: true },
+      include: {
+        activeVersion: { select: { id: true, label: true, name: true, steps: true } },
+        versions: { select: { id: true, label: true, name: true }, orderBy: { createdAt: "asc" } },
+        // Omgekeerde relatie: in welke gerechten wordt dit component gebruikt?
+        usedAsComponent: { select: { parentVersion: { select: { recipe: { select: { dish: true } } } } } },
+      },
+      orderBy: [{ dish: "asc" }],
     }),
     prisma.catalogItem.count({ where: { locationId } }),
     prisma.haccpCheckpoint.findMany({
@@ -104,6 +149,17 @@ async function buildContext(locationId: string) {
     catalogSize: catalogCount,
     haccp: checkpoints,
     menu: buildMenuContext(recipes, costMap),
+    components: buildComponentContext(
+      components.map((c) => ({
+        id: c.id,
+        dish: c.dish,
+        category: c.category,
+        activeVersion: c.activeVersion,
+        versions: c.versions,
+        // Dedupliceer: eenzelfde ouder kan het component in meerdere versies gebruiken.
+        usedIn: [...new Set(c.usedAsComponent.map((u) => u.parentVersion.recipe.dish))],
+      })),
+    ),
     flavor: buildFlavorContext(),
     alerts,
   };
@@ -140,6 +196,7 @@ const CHEF_SYSTEM_STABLE =
     "ABSOLUUT VERBOD bij een onvolledig geprijsd recept: noem dan GEEN margepercentage en GEEN foodcost-bedrag — ook niet als 'voorlopig', 'onvolledig', 'circa', of berekend over enkel de bekende ingrediënten. Reken zo'n getal ook NIET zelf uit in je antwoordtekst. Zeg puur in woorden dat de marge en foodcost nog niet te bepalen zijn zolang de ontbrekende prijs niet is ingevuld — presenteer geen enkel getal dat de indruk van precisie wekt. Je herkent een onvolledig recept aan foodcostComplete: false en/of marginPct: null bij het gerecht in de APP-CONTEXT, aan pricePerUnit: null bij een ingrediënt, en aan de 'LET OP … prijs onbekend'-melding die een tool teruggeeft na het opslaan. " +
     "Elk gerecht in de APP-CONTEXT heeft een recipeId, een activeVersion met een id, en een lijst versions met per versie een id + label. Gebruik ALTIJD deze echte id's uit de context — verzin of gok NOOIT een id. Voor update_recipe_version geef je id = het versie-id mee (meestal activeVersion.id, of het bijpassende id uit versions). Voor een nieuwe versie van een BESTAAND recept geef je recipeId mee aan save_recipe_version. " +
     "Componenten/sub-recepten: als er expliciet om een component of sub-recept (bv. een saus) VOOR een bestaand gerecht wordt gevraagd, maak je het recept met save_recipe_version en geef je asComponentOf.parentRecipeId mee (= recipeId van het ouderrecept) — dan wordt het meteen gekoppeld. Bestaat het te koppelen recept al, gebruik dan link_component met parentRecipeId + childRecipeId in plaats van een nieuw recept te maken. Koppelen vraagt eerst een bevestiging; als het koppelen faalt (bijvoorbeeld door de cyclus- of dieptecheck), meld dat dan eerlijk en doe niet alsof het gelukt is. " +
+    "Naast 'menu' bevat de APP-CONTEXT een aparte lijst 'components': dit zijn sub-recepten/componenten (elk met recipeId, activeVersion.id, versions[].id en usedIn = de gerechten waarin ze worden gebruikt). Het zijn GEEN los verkoopbare gerechten: neem ze NOOIT mee in een menu- of margeanalyse en stel ze niet voor als zelfstandig menu-item. Vraagt de chef expliciet om een component te bewerken (bijvoorbeeld de bereidingsstappen of de naam), dan mag dat wél: gebruik update_recipe_version met een id uit 'components' (activeVersion.id, of het juiste versions[].id) — verzin of gok ook hier nooit een id. " +
     "Als een tool een fout teruggeeft, presenteer je het resultaat NOOIT alsof het gelukt is: meld eerlijk en beknopt dat het niet lukte. Cijfers als marge en foodcost baseer je uitsluitend op de APP-CONTEXT (huidige staat); een uitkomst ná een wijziging die niet is opgeslagen noem je expliciet 'verwacht/na aanpassing', nooit als vaststaand feit. " +
     "Marge-Waakhond: de APP-CONTEXT bevat onder 'alerts' de openstaande marge-waarschuwingen (elk met id, ingredient, dish, affectedRecipeId, deltaPct, currentMarginPct). Vraagt de gebruiker om mee te denken over zo'n alert, geef dan NIET klakkeloos 'wissel van leverancier', maar draag 2 à 3 concrete, onderbouwde opties aan — bijvoorbeeld een goedkoper alternatief of substituut-ingrediënt (gebruik search_ingredients voor échte catalogusprijzen), een aangepaste portie, een menuprijs­aanpassing, of een combinatie — met per optie het effect op de marge. Voer een gekozen aanpak zelf uit via de juiste tool (switch_supplier, of update_recipe_version voor portie/menuprijs) en sluit de alert daarna af met resolve_margin_alert (alertId uit de context + een korte omschrijving van de aanpak). Sluit een alert nooit ongevraagd: doe het pas als de gebruiker een richting heeft gekozen. " +
     "Bij vragen over smaakcombinaties/pairings: de APP-CONTEXT bevat onder 'flavor' een GECUREERDE affinity-set (flavor.curatedIngredients + flavor.pairings), nu beperkt tot enkele basisingrediënten. Zit het gevraagde ingrediënt in die set, dan mag je een concrete match presenteren als 'affinity-score X uit onze data'. Zit het ingrediënt of de combinatie er NIET in (bv. eendenlever, miso als basis, en de meeste andere), zeg dan NOOIT dat je het niet weet en verzin NOOIT een exacte score: gebruik je eigen brede culinaire kennis als AI om onderbouwd te adviseren — welke smaken, texturen en bereidingen samengaan en waarom — en frame dat expliciet als culinair inzicht ('op basis van culinaire ervaring'), niet als een geverifieerd datapunt. Maak het onderscheid tussen beide bronnen in je antwoord altijd duidelijk. De gecureerde set is een tussenstap; de bredere Foodpairing®-koppeling volgt in fase 2. ";

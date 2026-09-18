@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Decimal } from "decimal.js";
-import { buildMenuContext, buildFlavorContext, buildSystem, type CtxRecipe } from "./chef";
+import { buildMenuContext, buildComponentContext, buildFlavorContext, buildSystem, type CtxRecipe, type CtxComponent } from "./chef";
 import type { VersionCost } from "@/lib/component-cost";
 
 // Kostenkaart zoals getVersionCostMap die levert (component-inclusief). Standaard
@@ -85,6 +85,48 @@ describe("buildMenuContext", () => {
     expect(item.activeVersion).toBeNull();
     expect(item.marginPct).toBeNull();
     expect(item.versions).toEqual([]);
+  });
+});
+
+const preiConfit: CtxComponent = {
+  id: "rec_prei_confit",
+  dish: "Prei Confit",
+  category: "Component",
+  activeVersion: { id: "ver_confit_v1", label: "v1.0", name: "Basis", steps: ["Confijt de prei in olie.", "Laat uitlekken."] },
+  versions: [{ id: "ver_confit_v1", label: "v1.0", name: "Basis" }],
+  usedIn: ["Prei du Soleil"],
+};
+
+describe("buildComponentContext", () => {
+  it("legt id's + usedIn bloot zodat een component gericht bewerkbaar is", () => {
+    const [c] = buildComponentContext([preiConfit]);
+    expect(c.recipeId).toBe("rec_prei_confit");
+    expect(c.dish).toBe("Prei Confit");
+    expect(c.activeVersion?.id).toBe("ver_confit_v1");
+    expect(c.versions.map((v) => v.id)).toEqual(["ver_confit_v1"]);
+    expect(c.usedIn).toEqual(["Prei du Soleil"]);
+  });
+
+  it("geeft de huidige bereidingsstappen mee zodat een component bewerkbaar is zonder ze te verzinnen", () => {
+    const [c] = buildComponentContext([preiConfit]);
+    expect(c.activeVersion?.steps).toEqual(["Confijt de prei in olie.", "Laat uitlekken."]);
+  });
+
+  it("framet een component NIET als verkoopbaar gerecht: geen menuPrice/marge/foodcost", () => {
+    const [c] = buildComponentContext([preiConfit]) as unknown as Record<string, unknown>[];
+    expect(c.isComponent).toBe(true);
+    // Cruciaal: velden die een 'verkoopbaar gerecht' suggereren mogen ontbreken,
+    // zodat het model een component nooit in een margeanalyse meeneemt.
+    expect(c).not.toHaveProperty("menuPrice");
+    expect(c).not.toHaveProperty("marginPct");
+    expect(c).not.toHaveProperty("foodcostPerCover");
+    expect(c).not.toHaveProperty("popularity");
+  });
+
+  it("verdraagt een component zonder actieve versie", () => {
+    const [c] = buildComponentContext([{ ...preiConfit, activeVersion: null }]);
+    expect(c.activeVersion).toBeNull();
+    expect(c.versions.map((v) => v.id)).toEqual(["ver_confit_v1"]);
   });
 });
 
